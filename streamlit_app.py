@@ -8,9 +8,9 @@ ACCENT_BLUE = "#1E88E5"
 ACCENT_GREEN = "#2E7D32"
 LEGACY_GRAY = "#374151"
 
-st.set_page_config(page_title="Life Policy Pilot | Policy Ladder Pro", layout="wide")
+st.set_page_config(page_title="Life Policy Pilot | Gap Analysis Pro", layout="wide")
 
-# Custom CSS for UI
+# Custom CSS
 st.markdown(f"""
     <style>
     .stMetric {{ background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; border-top: 5px solid {PRIMARY_RED}; }}
@@ -18,122 +18,109 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR: PARAMETERS ---
+# --- SIDEBAR: FLIGHT PARAMETERS ---
 with st.sidebar:
     st.header("📍 Flight Parameters")
     
-    with st.expander("🏠 Debts & Milestones", expanded=False):
-        mortgage = st.number_input("Mortgage Balance ($)", value=450000, step=10000)
-        mtg_years = st.slider("Mortgage Years Left", 5, 30, 25)
-        income_req = st.number_input("Annual Income to Replace ($)", value=80000)
-        income_years = st.slider("Years Needed", 5, 30, 20)
-        final_expenses = st.number_input("Final Expenses/Legacy ($)", value=50000)
+    with st.expander("🏠 Debt & Mortgage (D&M)", expanded=True):
+        mortgage = st.number_input("Remaining Mortgage ($)", value=400000, step=10000)
+        mtg_years = st.slider("Mortgage Years Left", 5, 30, 20)
+        other_debt = st.number_input("Auto/Personal/Credit Debt ($)", value=25000)
 
-    st.header("🪜 Policy Ladder Config")
+    with st.expander("💰 Income Replacement (I)", expanded=True):
+        income_req = st.number_input("Annual Income to Replace ($)", value=75000)
+        income_years = st.slider("Years of Replacement", 5, 30, 15)
+
+    with st.expander("🎓 Milestones & Future (E)", expanded=False):
+        college_total = st.number_input("Total College Fund ($)", value=100000)
+        childcare_annual = st.number_input("Annual Childcare Cost ($)", value=15000)
+        childcare_years = st.slider("Years of Childcare", 0, 15, 5)
+        final_expenses = st.number_input("Final Expenses (Funeral) ($)", value=20000)
+
+    with st.expander("🏦 Financial Assets (Subtract)", expanded=True):
+        liquid_assets = st.number_input("Cash/Savings/Investments ($)", value=50000)
+        existing_life = st.number_input("Current Life Insurance ($)", value=100000)
+
+    st.header("🪜 Proposed Ladder")
     policies = []
     for i in range(1, 4):
-        with st.expander(f"Policy #{i}", expanded=(i==1)):
-            p_active = st.checkbox(f"Enable Policy {i}", value=(i==1))
-            p_type = st.selectbox(f"Type {i}", ["Term", "IUL", "Whole Life"], key=f"type{i}")
-            p_amt = st.number_input(f"Death Benefit {i} ($)", value=250000 if i==1 else 0, step=50000, key=f"amt{i}")
-            p_prem = st.number_input(f"Annual Premium {i} ($)", value=400 if i==1 else 0, key=f"prem{i}")
-            
-            if p_type == "Term":
-                p_term = st.selectbox(f"Term Length {i}", [10, 15, 20, 25, 30], index=2, key=f"term{i}")
+        with st.expander(f"Proposed Policy #{i}", expanded=(i==1)):
+            p_active = st.checkbox(f"Active {i}", value=(i==1), key=f"act{i}")
+            p_amt = st.number_input(f"Benefit {i} ($)", value=250000 if i==1 else 0, key=f"amt{i}")
+            p_type = st.selectbox(f"Type {i}", ["Term", "Permanent (IUL/WL)"], key=f"type{i}")
+            p_prem = st.number_input(f"Annual Premium {i} ($)", value=350 if i==1 else 0, key=f"prem{i}")
+            if "Term" in p_type:
+                p_term = st.selectbox(f"Term {i}", [10, 15, 20, 25, 30], index=2, key=f"term{i}")
             else:
-                p_term = 50 # Permanent
-                
-            if p_active:
-                policies.append({"amt": p_amt, "term": p_term, "prem": p_prem, "type": p_type})
+                p_term = 40 # Permanent horizon
+            if p_active: policies.append({"amt": p_amt, "term": p_term, "prem": p_prem})
 
-# --- LOGIC: CALCULATING NEEDS VS COVERAGE ---
-years = list(range(0, 36))
+# --- LOGIC: CALCULATING THE GAP ---
+years = list(range(0, 41))
 data = []
-total_lifetime_savings = 0
 
 for yr in years:
-    # 1. Needs Calculation
+    # 1. Total Liabilities
     m = max(0, mortgage * (1 - (yr / mtg_years))) if yr <= mtg_years else 0
     i = income_req if yr <= income_years else 0
-    f = final_expenses
-    total_need = m + i + f
+    c = childcare_annual if yr <= childcare_years else 0
+    total_liabilities = m + i + c + college_total + final_expenses + other_debt
     
-    # 2. Coverage Calculation
-    total_coverage = 0
-    annual_premium_outlay = 0
-    saved_this_year = 0
+    # 2. Net Insurance Gap (Liabilities - Assets)
+    net_gap = max(0, total_liabilities - (liquid_assets + existing_life))
     
-    for p in policies:
-        if yr <= p['term']:
-            total_coverage += p['amt']
-            annual_premium_outlay += p['prem']
-        else:
-            saved_this_year += p['prem']
-            
+    # 3. Coverage Calculation
+    total_coverage = sum(p['amt'] for p in policies if yr <= p['term'])
+    annual_premium = sum(p['prem'] for p in policies if yr <= p['term'])
+    savings = sum(p['prem'] for p in policies if yr > p['term'])
+    
     data.append({
         "Year": yr, 
-        "Mortgage": m, "Income": i, "Legacy": f, "Total Need": total_need,
-        "Total Coverage": total_coverage,
-        "Premium Outlay": annual_premium_outlay,
-        "Savings": saved_this_year
+        "Mortgage": m, "Income": i, "Childcare": c,
+        "Gap": net_gap, "Total Coverage": total_coverage,
+        "Premium": annual_premium, "Savings": savings
     })
 
 df = pd.DataFrame(data)
 
 # --- DASHBOARD HEADER ---
-st.title("🛡️ The Policy Ladder Visualizer")
-st.markdown("Dynamic analysis of your staggered coverage versus declining financial liabilities.")
+st.title("🛡️ Life Insurance Gap Analysis")
+st.markdown("Precision underwriting means matching your coverage to your *actual* financial shortfall.")
 
 m1, m2, m3 = st.columns(3)
-m1.metric("Initial Total Coverage", f"${df['Total Coverage'][0]:,.0f}")
-m2.metric("Current Annual Premium", f"${df['Premium Outlay'][0]:,.0f}")
-m3.metric("Projected Total Savings", f"${df['Savings'].sum():,.0f}", delta="From Expired Policies")
+m1.metric("Current Insurance Gap", f"${df['Gap'][0]:,.0f}")
+m2.metric("New Ladder Coverage", f"${df['Total Coverage'][0]:,.0f}")
+m3.metric("Projected Savings", f"${df['Savings'].sum():,.0f}", delta="From Dropped Premiums")
 
-# --- THE VISUALIZER ---
+# --- VISUALIZER ---
 fig = go.Figure()
 
-# Needs (Stacked Areas)
-fig.add_trace(go.Scatter(x=df['Year'], y=df['Legacy'], name='Legacy Floor', fill='toself', mode='none', stackgroup='one', fillcolor=LEGACY_GRAY))
-fig.add_trace(go.Scatter(x=df['Year'], y=df['Mortgage'], name='Mortgage Debt', fill='tonexty', mode='none', stackgroup='one', fillcolor='#94a3b8'))
-fig.add_trace(go.Scatter(x=df['Year'], y=df['Income'], name='Income Replacement', fill='tonexty', mode='none', stackgroup='one', fillcolor=ACCENT_BLUE))
+# The "Net Gap" Area (The Target)
+fig.add_trace(go.Scatter(
+    x=df['Year'], y=df['Gap'], 
+    name='Required Insurance (Gap)', 
+    fill='tozeroy', mode='none', fillcolor='#D1D5DB'
+))
 
-# Coverage (The Ladder) - Step chart to show hard drops
+# The Proposed Ladder (The Solution)
 fig.add_trace(go.Scatter(
     x=df['Year'], y=df['Total Coverage'], 
-    name='Your Policy Ladder', 
-    line=dict(color=PRIMARY_RED, width=4, shape='hv'),
+    name='Proposed Policy Ladder', 
+    line=dict(color=PRIMARY_RED, width=5, shape='hv'),
     mode='lines'
 ))
 
 fig.update_layout(
-    hovermode="x unified",
-    height=600,
+    hovermode="x unified", height=600,
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     yaxis=dict(title="Dollar Amount ($)", gridcolor="#f0f0f0"),
-    xaxis=dict(title="Years into Future", gridcolor="#f0f0f0", range=[0, 30])
+    xaxis=dict(title="Years into Future", range=[0, 30])
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# --- INSIGHTS ENGINE ---
-st.header("✈️ Flight Path Insights")
-col1, col2 = st.columns(2)
+# --- INSIGHTS ---
+st.info(f"💡 **Fiduciary Insight:** Your family has **${liquid_assets + existing_life:,.0f}** in existing resources. We only need to bridge the remaining **${df['Gap'][0]:,.0f}**. Using a laddered approach ensures you aren't over-insured as your mortgage and childcare costs disappear.")
 
-with col1:
-    st.subheader("Why coverage drops:")
-    for yr in [10, 15, 20, 25, 30]:
-        m_val = max(0, mortgage * (1 - (yr / mtg_years))) if yr <= mtg_years else 0
-        if yr == mtg_years:
-            st.write(f"✅ **Year {yr}:** Mortgage is paid off. High-limit coverage no longer required.")
-        if yr == income_years:
-            st.write(f"✅ **Year {yr}:** Income replacement goal met. Children are likely self-sufficient.")
-
-with col2:
-    st.subheader("Cash Flow Recovery:")
-    active_savings = df[df['Savings'] > 0].groupby('Year')['Savings'].first()
-    if not active_savings.empty:
-        for yr, amt in active_savings.items():
-            if yr in [11, 16, 21, 26, 31]:
-                st.write(f"💰 **Year {yr-1}:** Policy expired. **${amt:,.0f}/year** returned to your household budget.")
-    else:
-        st.write("Adjust your policy terms in the sidebar to see projected premium savings.")
+if df['Total Coverage'][0] < df['Gap'][0]:
+    st.warning(f"⚠️ **Coverage Shortfall:** Your proposed ladder is currently **${df['Gap'][0] - df['Total Coverage'][0]:,.0f}** below your calculated need.")
