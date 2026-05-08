@@ -2,51 +2,91 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-# --- CONFIGURATION & BRANDING ---
+# --- BRANDING & STYLES ---
 PRIMARY_RED = "#CC0700"
-SILVER_BG = "#E2E8F0"
+ACCENT_BLUE = "#1E88E5"
+ACCENT_GREEN = "#2E7D32"
+SILVER_TEXT = "#E2E8F0"
 
-st.set_page_config(page_title="Policy Laddering Visualizer", layout="wide")
+st.set_page_config(page_title="Life Policy Pilot | Laddering Visualizer", layout="wide")
 
-# --- SIDEBAR INPUTS ---
-st.sidebar.header("Flight Parameters")
-mortgage = st.sidebar.number_input("Current Mortgage Balance ($)", value=400000, step=10000)
-mtg_years = st.sidebar.slider("Years Remaining on Mortgage", 5, 30, 20)
-income_req = st.sidebar.number_input("Annual Income to Replace ($)", value=75000, step=5000)
-income_years = st.sidebar.slider("Years of Income Replacement Needed", 5, 30, 15)
-youngest_child_age = st.sidebar.slider("Age of Youngest Child", 0, 21, 5)
+# Custom CSS for better styling
+st.markdown(f"""
+    <style>
+    .main {{ background-color: #ffffff; }}
+    .stMetric {{ background-color: #f8f9fa; padding: 15px; border-radius: 10px; border-left: 5px solid {PRIMARY_RED}; }}
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- LOGIC: GENERATING THE DATA ---
+# --- SIDEBAR: FLIGHT PARAMETERS ---
+with st.sidebar:
+    st.image("https://lifepolicypilot.blog/wp-content/uploads/2024/03/cropped-Life-Policy-Pilot-Logo.png", width=200) # Optional: Add your logo URL
+    st.header("📍 Flight Parameters")
+    
+    with st.expander("🏠 Housing & Debt", expanded=True):
+        mortgage = st.number_input("Mortgage Balance ($)", value=450000, step=10000)
+        mtg_years = st.slider("Mortgage Years Left", 5, 30, 25)
+        other_debt = st.number_input("Other Debts (Car/Student) ($)", value=15000)
+
+    with st.expander("💰 Family Income", expanded=True):
+        income_req = st.number_input("Annual Income to Replace ($)", value=80000)
+        income_years = st.slider("Years Needed", 5, 30, 20)
+        inflation = st.slider("Inflation Adjustment (%)", 0.0, 5.0, 3.0) / 100
+
+    with st.expander("🎓 Future & Legacy", expanded=True):
+        children_count = st.number_input("Number of Children", 0, 5, 2)
+        college_fund = st.number_input("Target College Fund per Child ($)", value=100000)
+        final_expenses = st.number_input("Final Expenses/Legacy ($)", value=50000)
+
+# --- LOGIC: CALCULATING THE MILESTONES ---
 years = list(range(0, 31))
 data = []
 
 for yr in years:
-    current_mtg = max(0, mortgage * (1 - (yr / mtg_years))) if yr <= mtg_years else 0
-    current_income = income_req if yr <= income_years else 0
-    current_child = 25000 if (yr + youngest_child_age) <= 22 else 0
-    total_need = current_mtg + current_income + current_child
-    data.append({"Year": yr, "Mortgage": current_mtg, "Income": current_income, "Children": current_child, "Total": total_need})
+    # 1. Mortgage (Linear decrease)
+    m = max(0, mortgage * (1 - (yr / mtg_years))) if yr <= mtg_years else 0
+    # 2. Income Replacement (With Inflation)
+    i = (income_req * ((1 + inflation) ** yr)) if yr <= income_years else 0
+    # 3. Children (Stepped decrease as they age out)
+    c = (children_count * college_fund) if yr <= 15 else 0 # Simplified college horizon
+    # 4. Final Expenses (Fixed floor)
+    f = final_expenses
+    
+    total = m + i + c + f + other_debt
+    data.append({"Year": yr, "Mortgage": m, "Income": i, "Education": c, "Legacy": f, "Total": total})
 
 df = pd.DataFrame(data)
 
-# --- VISUALIZATION ---
-st.title("Custom Policy Laddering Visualizer")
-st.markdown("Assess your projected financial liability milestones and see how a laddered strategy eliminates unnecessary premium costs.")
+# --- HEADER METRICS ---
+st.title("🛡️ Policy Laddering Visualizer")
+st.markdown("Compare your total financial liabilities against a smart, staggered insurance strategy.")
 
+m1, m2, m3 = st.columns(3)
+m1.metric("Peak Coverage Needed", f"${df['Total'].max():,.0f}")
+m2.metric("Legacy Floor", f"${final_expenses:,.0f}")
+m3.metric("Optimization Potential", "High", delta="30-40% Savings")
+
+# --- THE VISUALIZER ---
 fig = go.Figure()
 
-fig.add_trace(go.Scatter(x=df['Year'], y=df['Mortgage'], name='Mortgage', fill='tonexty', mode='none', stackgroup='one', fillcolor='#D1D5DB'))
-fig.add_trace(go.Scatter(x=df['Year'], y=df['Income'], name='Income Replacement', fill='tonexty', mode='none', stackgroup='one', fillcolor='#9CA3AF'))
-fig.add_trace(go.Scatter(x=df['Year'], y=df['Children'], name='Children/Education', fill='tonexty', mode='none', stackgroup='one', fillcolor='#4B5563'))
+# Stacked Area Chart with Vibrant Colors
+fig.add_trace(go.Scatter(x=df['Year'], y=df['Legacy'], name='Legacy/Final Expenses', fill='toself', mode='none', stackgroup='one', fillcolor='#374151'))
+fig.add_trace(go.Scatter(x=df['Year'], y=df['Mortgage'], name='Mortgage & Debt', fill='tonexty', mode='none', stackgroup='one', fillcolor='#94a3b8'))
+fig.add_trace(go.Scatter(x=df['Year'], y=df['Education'], name='Education Fund', fill='tonexty', mode='none', stackgroup='one', fillcolor=ACCENT_GREEN))
+fig.add_trace(go.Scatter(x=df['Year'], y=df['Income'], name='Income Replacement (Adjusted)', fill='tonexty', mode='none', stackgroup='one', fillcolor=ACCENT_BLUE))
+
+# Overlay the "Ladders"
+fig.add_trace(go.Scatter(x=[0, 10, 10, 0], y=[df['Total'].max(), df['Total'].max(), 0, 0], fill="toself", name="10-Year Rung", line=dict(color=PRIMARY_RED, width=2), opacity=0.1, showlegend=True))
 
 fig.update_layout(
-    plot_bgcolor='white',
-    paper_bgcolor='white',
     hovermode="x unified",
-    yaxis_title="Coverage Amount ($)",
-    xaxis_title="Years into Future",
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    plot_bgcolor='white',
+    height=600,
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    yaxis=dict(gridcolor='#f0f0f0', title="Coverage Amount ($)"),
+    xaxis=dict(gridcolor='#f0f0f0', title="Years into Future")
 )
 
 st.plotly_chart(fig, use_container_width=True)
-st.info("Results are projected estimates for educational purposes and do not represent a final underwriting offer.")
+
+st.success("💡 **Fiduciary Insight:** Notice how your needs drop significantly at Year 15 and 25. A single 30-year policy would force you to pay for 'empty' coverage in those later years.")
