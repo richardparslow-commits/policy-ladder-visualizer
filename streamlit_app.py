@@ -227,10 +227,15 @@ with pdf_col:
     )
 
 # --- BOTTOM CTA ---
+gap_today = int(df["Gap"][0])
+if gap_today > 0:
+    cta_prompt = f"Your family's coverage gap is real — <b>${gap_today:,.0f}</b> today. See how affordable closing it can be."
+else:
+    cta_prompt = "Your coverage needs are covered today — but life changes. Get a fresh second opinion."
 st.markdown(
     f"""
     <div style="text-align:center; margin:1.6rem 0 0.4rem 0;">
-        <p style="margin:0 0 0.6rem 0; color:{LEGACY_GRAY}; font-size:1.05rem;">Ready to take the next step?</p>
+        <p style="margin:0 0 0.6rem 0; color:{LEGACY_GRAY}; font-size:1.05rem;">{cta_prompt}</p>
         <a href="https://lifeinsurancebrokeradvocate.com/contact" target="_blank" rel="noopener noreferrer"
            style="background:{PRIMARY_RED}; color:#ffffff; text-decoration:none; font-size:1.05rem; font-weight:600;
                   padding:0.7rem 2rem; border-radius:0.5rem; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,0.2);">

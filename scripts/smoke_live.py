@@ -27,7 +27,7 @@ MARKERS = [
         "EXPECTED_MARKERS",
         "Mortgage Interest Rate,Debt Payoff Years,College Starts In,Years of College to Fund,"
         "Existing Policy Type,Existing Policy Years Remaining,Annual Premium Roll-Off,"
-        "Client / Family Name,Get a Quote,Ready to take the next step,"
+        "Client / Family Name,Get a Quote,coverage gap is real,"
         "Download year-by-year table,Download one-page PDF report",
     ).split(",") if m.strip()
 ]
