@@ -225,3 +225,18 @@ with pdf_col:
         key="pdf_export",
         help="Client handout: headline metrics, the gap-vs-ladder chart, and the full year-by-year table on one page.",
     )
+
+# --- BOTTOM CTA ---
+st.markdown(
+    f"""
+    <div style="text-align:center; margin:1.6rem 0 0.4rem 0;">
+        <p style="margin:0 0 0.6rem 0; color:{LEGACY_GRAY}; font-size:1.05rem;">Ready to take the next step?</p>
+        <a href="https://lifeinsurancebrokeradvocate.com/contact" target="_blank" rel="noopener noreferrer"
+           style="background:{PRIMARY_RED}; color:#ffffff; text-decoration:none; font-size:1.05rem; font-weight:600;
+                  padding:0.7rem 2rem; border-radius:0.5rem; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,0.2);">
+            Get a Quote ↗
+        </a>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
