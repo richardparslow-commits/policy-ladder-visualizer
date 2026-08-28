@@ -117,7 +117,21 @@ for yr in years:
 df = pd.DataFrame(data)
 
 # --- DASHBOARD HEADER ---
-st.title("🛡️ Life Insurance Gap Analysis")
+st.markdown(
+    f"""
+    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin:0.2rem 0 0.4rem 0;">
+        <h1 style="margin:0; font-size:2.25rem; font-weight:700; line-height:1.4; letter-spacing:-0.02em; color:inherit; font-family:inherit;">
+            🛡️ Life Insurance Gap Analysis
+        </h1>
+        <a href="https://lifeinsurancebrokeradvocate.com/contact" target="_blank" rel="noopener noreferrer"
+           style="background:{PRIMARY_RED}; color:#ffffff; text-decoration:none; font-size:0.95rem; font-weight:600;
+                  padding:0.5rem 1.1rem; border-radius:0.5rem; white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,0.15);">
+            Get a Quote ↗
+        </a>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 st.markdown("Precision underwriting means matching your coverage to your *actual* financial shortfall.")
 
 annual_rolloff = df['Premium'].iloc[0] - df['Premium'].iloc[-1]

@@ -27,7 +27,7 @@ MARKERS = [
         "EXPECTED_MARKERS",
         "Mortgage Interest Rate,Debt Payoff Years,College Starts In,Years of College to Fund,"
         "Existing Policy Type,Existing Policy Years Remaining,Annual Premium Roll-Off,"
-        "Client / Family Name,Download year-by-year table,Download one-page PDF report",
+        "Client / Family Name,Get a Quote,Download year-by-year table,Download one-page PDF report",
     ).split(",") if m.strip()
 ]
 FORBIDDEN = [m.strip() for m in os.environ.get("FORBIDDEN_MARKERS", "Projected Savings").split(",") if m.strip()]
