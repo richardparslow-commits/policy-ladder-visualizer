@@ -1,7 +1,9 @@
+import json
+import urllib.parse
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import date
+from datetime import date, datetime
 
 from pdf_report import build_client_pdf
 
@@ -39,52 +41,201 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR: FLIGHT PARAMETERS ---
+# --- SIDEBAR: GUIDED INPUTS ---
+# Preset scenarios let new users see a sensible starting point in one click.
+PRESETS = {
+    "Custom (default)": {},
+    "Young family with mortgage": {
+        "mortgage": 350000, "mtg_rate": 6.25, "mtg_years": 30, "other_debt": 15000, "debt_years": 4,
+        "income_req": 90000, "income_years": 20,
+        "childcare_annual": 18000, "childcare_years": 6,
+        "college_total": 120000, "college_start": 14, "college_years": 4,
+        "final_expenses": 25000, "liquid_assets": 40000, "existing_life": 100000,
+        "existing_life_type": "Term (expires)", "existing_life_years": 20,
+        "act1": True, "amt1": 300000, "type1": "Term", "prem1": 420, "term1": 20,
+        "act2": True, "amt2": 200000, "type2": "Term", "prem2": 180, "term2": 30,
+        "act3": False, "amt3": 0, "type3": "Term", "prem3": 0, "term3": 20,
+    },
+    "Empty nester": {
+        "mortgage": 80000, "mtg_rate": 4.5, "mtg_years": 10, "other_debt": 5000, "debt_years": 2,
+        "income_req": 40000, "income_years": 5,
+        "childcare_annual": 0, "childcare_years": 0,
+        "college_total": 0, "college_start": 0, "college_years": 0,
+        "final_expenses": 25000, "liquid_assets": 200000, "existing_life": 75000,
+        "existing_life_type": "Permanent (never expires)", "existing_life_years": 41,
+        "act1": True, "amt1": 150000, "type1": "Term", "prem1": 220, "term1": 10,
+        "act2": False, "amt2": 0, "type2": "Term", "prem2": 0, "term2": 20,
+        "act3": False, "amt3": 0, "type3": "Term", "prem3": 0, "term3": 20,
+    },
+    "Sole breadwinner": {
+        "mortgage": 300000, "mtg_rate": 5.75, "mtg_years": 25, "other_debt": 20000, "debt_years": 5,
+        "income_req": 120000, "income_years": 25,
+        "childcare_annual": 20000, "childcare_years": 8,
+        "college_total": 150000, "college_start": 12, "college_years": 4,
+        "final_expenses": 20000, "liquid_assets": 25000, "existing_life": 50000,
+        "existing_life_type": "Term (expires)", "existing_life_years": 10,
+        "act1": True, "amt1": 500000, "type1": "Term", "prem1": 550, "term1": 25,
+        "act2": True, "amt2": 250000, "type2": "Term", "prem2": 220, "term2": 30,
+        "act3": False, "amt3": 0, "type3": "Term", "prem3": 0, "term3": 20,
+    },
+}
+
 with st.sidebar:
-    st.header("📍 Flight Parameters")
-    client_name = st.text_input("Client / Family Name (optional)", placeholder="e.g., The Smith Family", key="client_name")
-    
-    with st.expander("🏠 Debt & Mortgage (D&M)", expanded=True):
-        mortgage = st.number_input("Remaining Mortgage ($)", value=400000, step=10000)
-        mtg_rate = st.number_input("Mortgage Interest Rate (%)", value=6.0, min_value=0.0, max_value=25.0, step=0.125, format="%.3f")
-        mtg_years = st.slider("Mortgage Years Left", 5, 30, 20)
-        other_debt = st.number_input("Auto/Personal/Credit Debt ($)", value=25000)
-        debt_years = st.slider("Debt Payoff Years", 1, 15, 5)
+    st.header("📝 Your situation")
+    st.caption("Answer the questions in order — or start from a preset.")
 
-    with st.expander("💰 Income Replacement (I)", expanded=True):
-        income_req = st.number_input("Annual Income to Replace ($)", value=75000)
-        income_years = st.slider("Years of Replacement", 5, 30, 15)
+    # Restore a shared scenario from the URL, if one was opened.
+    raw_scenario = st.query_params.get("scenario", "")
+    if raw_scenario:
+        restored = None
+        try:
+            restored = json.loads(raw_scenario)
+        except Exception:
+            try:
+                restored = json.loads(urllib.parse.unquote(raw_scenario))
+            except Exception:
+                restored = None
+        if restored:
+            st.session_state["preset"] = "Custom (default)"
+            for k, v in restored.items():
+                if k == "policies" and isinstance(v, list):
+                    for idx, pol in enumerate(v, start=1):
+                        if isinstance(pol, dict):
+                            st.session_state[f"act{idx}"] = bool(pol.get("active", True))
+                            st.session_state[f"amt{idx}"] = pol.get("amt", 0)
+                            st.session_state[f"type{idx}"] = pol.get("type", "Term")
+                            st.session_state[f"prem{idx}"] = pol.get("prem", 0)
+                            st.session_state[f"term{idx}"] = pol.get("term", 20)
+                else:
+                    st.session_state[k] = v
 
-    with st.expander("🎓 Milestones & Future (E)", expanded=False):
-        college_total = st.number_input("Total College Fund ($)", value=100000)
-        college_start = st.slider("College Starts In (Years)", 0, 25, 13)
-        college_years = st.slider("Years of College to Fund", 0, 8, 4)
-        childcare_annual = st.number_input("Annual Childcare Cost ($)", value=15000)
-        childcare_years = st.slider("Years of Childcare", 0, 15, 5)
-        final_expenses = st.number_input("Final Expenses (Funeral) ($)", value=20000)
+    preset = st.selectbox(
+        "Start from a preset (optional)",
+        list(PRESETS),
+        key="preset",
+        help="Pick a realistic starting point, then adjust any numbers below.",
+    )
+    if preset != "Custom (default)":
+        for k, v in PRESETS[preset].items():
+            st.session_state[k] = v
 
-    with st.expander("🏦 Financial Assets (Subtract)", expanded=True):
-        liquid_assets = st.number_input("Cash/Savings/Investments ($)", value=50000)
-        existing_life = st.number_input("Current Life Insurance ($)", value=100000)
-        existing_life_type = st.selectbox("Existing Policy Type", ["Term (expires)", "Permanent (never expires)"])
+    client_name = st.text_input(
+        "Client / Family Name (optional)",
+        placeholder="e.g., The Smith Family",
+        key="client_name",
+        help="Shown on the PDF report header.",
+    )
+
+    tab_family, tab_money, tab_coverage, tab_advanced = st.tabs(
+        ["1 · Family", "2 · Money & debts", "3 · Coverage", "4 · Advanced"]
+    )
+
+    with tab_family:
+        income_req = st.number_input(
+            "Yearly income your family would need", value=75000, step=5000, key="income_req",
+            help="What your family would need each year if you were gone — usually the income you earn.",
+        )
+        income_years = st.slider(
+            "How many years it must last", 5, 30, 15, key="income_years",
+            help="Often until the kids are independent or your spouse retires.",
+        )
+        childcare_annual = st.number_input(
+            "Childcare cost per year", value=15000, step=1000, key="childcare_annual",
+            help="What childcare costs today, per year.",
+        )
+        childcare_years = st.slider(
+            "Years of childcare needed", 0, 15, 5, key="childcare_years",
+            help="How many more years you expect to pay for childcare.",
+        )
+        college_total = st.number_input(
+            "Total college fund for the kids", value=100000, step=5000, key="college_total",
+            help="The total you want set aside for college across all kids.",
+        )
+        college_start = st.slider(
+            "Years until college starts", 0, 25, 13, key="college_start",
+            help="Years from now until the first tuition payment is due.",
+        )
+        college_years = st.slider(
+            "Years of college to cover", 0, 8, 4, key="college_years",
+            help="How many years of tuition this fund covers.",
+        )
+        final_expenses = st.number_input(
+            "Funeral / final expenses", value=20000, step=1000, key="final_expenses",
+            help="One-time costs like funeral, probate, and final medical bills.",
+        )
+
+    with tab_money:
+        mortgage = st.number_input(
+            "Money still owed on your mortgage", value=400000, step=10000, key="mortgage",
+            help="What you still owe on your home today.",
+        )
+        mtg_years = st.slider(
+            "Years left on your mortgage", 5, 30, 20, key="mtg_years",
+            help="How many years remain on your mortgage.",
+        )
+        other_debt = st.number_input(
+            "Other debts (car, cards, loans)", value=25000, step=5000, key="other_debt",
+            help="Car loans, credit cards, personal loans — anything you owe besides the mortgage.",
+        )
+        liquid_assets = st.number_input(
+            "Cash, savings & investments", value=50000, step=5000, key="liquid_assets",
+            help="Money that could be used right away to cover expenses.",
+        )
+
+    with tab_coverage:
+        existing_life = st.number_input(
+            "Life insurance you already own", value=100000, step=10000, key="existing_life",
+            help="The death benefit of life insurance you already have.",
+        )
+        st.markdown("**🪜 Your proposed policies**")
+        policies = []
+        policy_widgets = []
+        for i in range(1, 4):
+            with st.expander(f"Policy #{i}", expanded=(i == 1)):
+                p_active = st.checkbox("Include this policy?", value=(i == 1), key=f"act{i}",
+                                       help="Untick to leave this slot empty.")
+                p_amt = st.number_input("Amount it pays out ($)", value=250000 if i == 1 else 0,
+                                        step=10000, key=f"amt{i}",
+                                        help="The death benefit this policy pays out.")
+                p_type = st.selectbox("Kind of policy", ["Term", "Permanent (whole life)"],
+                                      key=f"type{i}",
+                                      help="Term lasts a set number of years; permanent lasts your whole life.")
+                p_prem = st.number_input("Cost per year ($)", value=350 if i == 1 else 0,
+                                         step=50, key=f"prem{i}",
+                                         help="What you pay each year for this policy.")
+                if "Term" in p_type:
+                    p_term = st.selectbox("How long it lasts (years)", [10, 15, 20, 25, 30],
+                                          index=2, key=f"term{i}",
+                                          help="How many years the term policy stays in force.")
+                else:
+                    p_term = MODEL_YEARS + 1  # Permanent: outlives the model window
+                policy_widgets.append({"active": p_active, "amt": p_amt, "type": p_type,
+                                       "prem": p_prem, "term": p_term})
+                if p_active:
+                    policies.append({"amt": p_amt, "term": p_term, "prem": p_prem})
+
+    with tab_advanced:
+        mtg_rate = st.number_input(
+            "Your mortgage interest rate (%)", value=6.0, min_value=0.0, max_value=25.0,
+            step=0.125, format="%.3f", key="mtg_rate",
+            help="Used to calculate the real remaining mortgage balance over time. Check your statement.",
+        )
+        debt_years = st.slider(
+            "Years until those debts are paid off", 1, 15, 5, key="debt_years",
+            help="How many years until your other debts are fully paid off.",
+        )
+        existing_life_type = st.selectbox(
+            "What kind of policy is it?", ["Term (expires)", "Permanent (never expires)"],
+            key="existing_life_type",
+            help="Term policies expire; permanent (whole life) policies stay in force.",
+        )
         if existing_life_type.startswith("Term"):
-            existing_life_years = st.slider("Existing Policy Years Remaining", 1, MODEL_YEARS, 10)
+            existing_life_years = st.slider(
+                "Years left on that policy", 1, MODEL_YEARS, 10, key="existing_life_years",
+                help="Years before this term policy lapses. Choose Permanent above if it never expires.",
+            )
         else:
             existing_life_years = MODEL_YEARS + 1  # Permanent: outlives the model window
-
-    st.header("🪜 Proposed Ladder")
-    policies = []
-    for i in range(1, 4):
-        with st.expander(f"Proposed Policy #{i}", expanded=(i==1)):
-            p_active = st.checkbox(f"Active {i}", value=(i==1), key=f"act{i}")
-            p_amt = st.number_input(f"Benefit {i} ($)", value=250000 if i==1 else 0, key=f"amt{i}")
-            p_type = st.selectbox(f"Type {i}", ["Term", "Permanent (IUL/WL)"], key=f"type{i}")
-            p_prem = st.number_input(f"Annual Premium {i} ($)", value=350 if i==1 else 0, key=f"prem{i}")
-            if "Term" in p_type:
-                p_term = st.selectbox(f"Term {i}", [10, 15, 20, 25, 30], index=2, key=f"term{i}")
-            else:
-                p_term = MODEL_YEARS + 1  # Permanent: outlives the model window
-            if p_active: policies.append({"amt": p_amt, "term": p_term, "prem": p_prem})
 
 # --- LOGIC: CALCULATING THE GAP ---
 def mortgage_balance(principal, annual_rate_pct, years_left, elapsed_years):
@@ -99,39 +250,70 @@ def mortgage_balance(principal, annual_rate_pct, years_left, elapsed_years):
     growth = (1 + r) ** n
     return max(0.0, principal * (growth - (1 + r) ** t) / (growth - 1))
 
-years = list(range(0, MODEL_YEARS + 1))
-data = []
 
-for yr in years:
-    # 1. Total Liabilities
-    m = mortgage_balance(mortgage, mtg_rate, mtg_years, yr)
-    i = income_req if yr < income_years else 0
-    c = childcare_annual if yr < childcare_years else 0
-    # College is a timed block: spread evenly over the funded years (not a day-one lump)
-    college = (college_total / college_years) if (college_years > 0 and college_start <= yr < college_start + college_years) else 0
-    d = max(0.0, other_debt * (1 - yr / debt_years)) if yr < debt_years else 0
-    total_liabilities = m + i + c + college + d + final_expenses
-    
-    # 2. Net Insurance Gap (Liabilities - Assets)
-    # Existing life coverage only offsets while it is in force — a lapsing term policy stops counting
-    life_offset = existing_life if yr < existing_life_years else 0
-    net_gap = max(0, total_liabilities - (liquid_assets + life_offset))
-    
-    # 3. Coverage Calculation (a "term-N" policy covers death in years 0..N-1)
-    total_coverage = sum(p['amt'] for p in policies if yr < p['term'])
-    annual_premium = sum(p['prem'] for p in policies if yr < p['term'])
-    
-    data.append({
-        "Year": yr,
-        "Mortgage": m, "Debt": d, "Income": i, "Childcare": c, "College": college,
-        "Final Expenses": final_expenses,
-        "Total Liabilities": total_liabilities,
-        "Existing Resources": liquid_assets + life_offset,
-        "Gap": net_gap, "Total Coverage": total_coverage,
-        "Premium": annual_premium
-    })
+def build_df(mortgage, mtg_rate, mtg_years, other_debt, debt_years, income_req, income_years,
+             college_total, college_start, college_years, childcare_annual, childcare_years,
+             final_expenses, liquid_assets, existing_life, existing_life_years, policies):
+    """Year-by-year model: liabilities, net gap, ladder coverage, and premiums."""
+    data = []
+    for yr in range(0, MODEL_YEARS + 1):
+        m = mortgage_balance(mortgage, mtg_rate, mtg_years, yr)
+        i = income_req if yr < income_years else 0
+        c = childcare_annual if yr < childcare_years else 0
+        # College is a timed block: spread evenly over the funded years (not a day-one lump)
+        college = (college_total / college_years) if (college_years > 0 and college_start <= yr < college_start + college_years) else 0
+        d = max(0.0, other_debt * (1 - yr / debt_years)) if yr < debt_years else 0
+        total_liabilities = m + i + c + college + d + final_expenses
 
-df = pd.DataFrame(data)
+        # Existing life coverage only offsets while it is in force — a lapsing term policy stops counting
+        life_offset = existing_life if yr < existing_life_years else 0
+        net_gap = max(0, total_liabilities - (liquid_assets + life_offset))
+
+        # A "term-N" policy covers death in years 0..N-1
+        total_coverage = sum(p['amt'] for p in policies if yr < p['term'])
+        annual_premium = sum(p['prem'] for p in policies if yr < p['term'])
+
+        data.append({
+            "Year": yr,
+            "Mortgage": m, "Debt": d, "Income": i, "Childcare": c, "College": college,
+            "Final Expenses": final_expenses,
+            "Total Liabilities": total_liabilities,
+            "Existing Resources": liquid_assets + life_offset,
+            "Gap": net_gap, "Total Coverage": total_coverage,
+            "Premium": annual_premium
+        })
+    return pd.DataFrame(data)
+
+
+df = build_df(mortgage, mtg_rate, mtg_years, other_debt, debt_years, income_req, income_years,
+              college_total, college_start, college_years, childcare_annual, childcare_years,
+              final_expenses, liquid_assets, existing_life, existing_life_years, policies)
+
+
+def snapshot_inputs():
+    return {
+        "mortgage": mortgage, "mtg_rate": mtg_rate, "mtg_years": mtg_years,
+        "other_debt": other_debt, "debt_years": debt_years,
+        "income_req": income_req, "income_years": income_years,
+        "college_total": college_total, "college_start": college_start, "college_years": college_years,
+        "childcare_annual": childcare_annual, "childcare_years": childcare_years,
+        "final_expenses": final_expenses,
+        "liquid_assets": liquid_assets, "existing_life": existing_life,
+        "existing_life_type": existing_life_type, "existing_life_years": existing_life_years,
+        "policies": policy_widgets,
+    }
+
+
+def df_from_snapshot(snap):
+    kw = {k: v for k, v in snap.items() if k in (
+        "mortgage", "mtg_rate", "mtg_years", "other_debt", "debt_years", "income_req",
+        "income_years", "college_total", "college_start", "college_years",
+        "childcare_annual", "childcare_years", "final_expenses", "liquid_assets",
+        "existing_life", "existing_life_years")}
+    saved_policies = [{"amt": p["amt"], "term": p["term"], "prem": p["prem"]}
+                      for p in snap.get("policies", []) if p.get("active")]
+    return build_df(policies=saved_policies, **kw)
+
 
 # --- DASHBOARD HEADER ---
 st.markdown(
@@ -156,23 +338,60 @@ m2.metric("New Ladder Coverage", f"${df['Total Coverage'][0]:,.0f}")
 m3.metric("Annual Premium Roll-Off", f"${annual_rolloff:,.0f}/yr", delta="As terms expire", delta_color="off")
 st.caption("💡 Roll-off is the annual premium you stop paying once terms expire inside the model window — it is not a savings comparison against one large policy.")
 
+# --- SCENARIO TOOLS: save, compare, share ---
+tool1, tool2, tool3 = st.columns(3)
+with tool1:
+    if st.button("📌 Save this scenario", key="save_scenario", use_container_width=True,
+                 help="Remember these numbers so you can compare them against another option."):
+        st.session_state["saved_scenario"] = snapshot_inputs()
+        st.session_state["saved_at"] = datetime.now().strftime("%H:%M")
+        st.toast(f"Scenario saved at {st.session_state['saved_at']}")
+with tool2:
+    if st.button("🔗 Shareable link", key="share_link", use_container_width=True,
+                 help="Encodes this scenario in the address bar — send it or bookmark it."):
+        st.query_params["scenario"] = urllib.parse.quote(json.dumps(snapshot_inputs(), default=str))
+        st.toast("Scenario link ready — copy it from the browser address bar.")
+# Read the saved snapshot after the handlers above so the toggle appears on the same run as the save.
+saved = st.session_state.get("saved_scenario")
+with tool3:
+    if saved is not None:
+        compare_on = st.toggle("Compare with saved", key="compare_toggle",
+                               help="Overlay the saved scenario on the chart and compare the numbers.")
+    else:
+        compare_on = False
+        st.caption("Save a scenario to compare two options.")
+
 # --- VISUALIZER ---
 fig = go.Figure()
 
 # The "Net Gap" Area (The Target)
 fig.add_trace(go.Scatter(
-    x=df['Year'], y=df['Gap'], 
-    name='Required Insurance (Gap)', 
+    x=df['Year'], y=df['Gap'],
+    name='Required Insurance (Gap)',
     fill='tozeroy', mode='none', fillcolor='#D1D5DB'
 ))
 
 # The Proposed Ladder (The Solution)
 fig.add_trace(go.Scatter(
-    x=df['Year'], y=df['Total Coverage'], 
-    name='Proposed Policy Ladder', 
+    x=df['Year'], y=df['Total Coverage'],
+    name='Proposed Policy Ladder',
     line=dict(color=PRIMARY_RED, width=5, shape='hv'),
     mode='lines'
 ))
+
+saved_df = None
+if compare_on and saved is not None:
+    saved_df = df_from_snapshot(saved)
+    fig.add_trace(go.Scatter(
+        x=saved_df['Year'], y=saved_df['Gap'],
+        name='Saved: Required (Gap)',
+        line=dict(color=ACCENT_BLUE, width=2, dash='dot'),
+    ))
+    fig.add_trace(go.Scatter(
+        x=saved_df['Year'], y=saved_df['Total Coverage'],
+        name='Saved: Ladder',
+        line=dict(color=ACCENT_GREEN, width=2, dash='dot'),
+    ))
 
 fig.update_layout(
     hovermode="x unified", height=600,
@@ -182,6 +401,11 @@ fig.update_layout(
 )
 
 st.plotly_chart(fig, use_container_width=True)
+
+if saved_df is not None:
+    diff0 = int(df['Gap'][0] - saved_df['Gap'][0])
+    st.caption(f"🔁 vs. saved scenario — today's gap differs by **${diff0:+,.0f}** "
+               f"(saved: ${saved_df['Gap'][0]:,.0f}, current: ${df['Gap'][0]:,.0f}).")
 
 # --- INSIGHTS ---
 life_expiry_note = f" — but it **expires in year {existing_life_years}**" if existing_life_years <= MODEL_YEARS else ""

@@ -25,10 +25,11 @@ POLL_TIMEOUT_SECONDS = int(os.environ.get("POLL_TIMEOUT_SECONDS", "480"))
 MARKERS = [
     m.strip() for m in os.environ.get(
         "EXPECTED_MARKERS",
-        "Mortgage Interest Rate,Debt Payoff Years,College Starts In,Years of College to Fund,"
-        "Existing Policy Type,Existing Policy Years Remaining,Annual Premium Roll-Off,"
-        "Client / Family Name,Get a Quote,coverage gap is real,"
-        "Download year-by-year table,Download one-page PDF report",
+        "interest rate,Years until those debts are paid off,Years until college starts,"
+        "Years of college to cover,What kind of policy is it,Years left on that policy,"
+        "Annual Premium Roll-Off,Client / Family Name,Get a Quote,coverage gap is real,"
+        "Download year-by-year table,Download one-page PDF report,"
+        "Start from a preset,Save this scenario,1 · Family",
     ).split(",") if m.strip()
 ]
 FORBIDDEN = [m.strip() for m in os.environ.get("FORBIDDEN_MARKERS", "Projected Savings").split(",") if m.strip()]
