@@ -290,6 +290,18 @@ df = build_df(mortgage, mtg_rate, mtg_years, other_debt, debt_years, income_req,
               college_total, college_start, college_years, childcare_annual, childcare_years,
               final_expenses, liquid_assets, existing_life, existing_life_years, policies)
 
+# --- WORST-YEAR SHORTFALL & RUNG DROP-OFFS (drive the headline card, chart markers, and summary) ---
+shortfall = (df['Gap'] - df['Total Coverage']).clip(lower=0)
+worst_idx = int(shortfall.idxmax())
+worst_shortfall = float(shortfall.iloc[worst_idx])
+worst_year = int(df['Year'].iloc[worst_idx])
+
+# Group rung expiries by year so same-year drops get a single label.
+drop_groups = defaultdict(list)
+for _i, _w in enumerate(policy_widgets, start=1):
+    if _w["active"] and _w["term"] <= MODEL_YEARS:
+        drop_groups[_w["term"]].append((_i, _w["amt"]))
+
 
 def snapshot_inputs():
     return {
@@ -333,10 +345,16 @@ st.markdown("Precision underwriting means matching your coverage to your *actual
 
 annual_rolloff = df['Premium'].iloc[0] - df['Premium'].iloc[-1]
 
-m1, m2, m3 = st.columns(3)
-m1.metric("Current Insurance Gap", f"${df['Gap'][0]:,.0f}")
-m2.metric("New Ladder Coverage", f"${df['Total Coverage'][0]:,.0f}")
-m3.metric("Annual Premium Roll-Off", f"${annual_rolloff:,.0f}/yr", delta="As terms expire", delta_color="off")
+# #9 — the takeaway leads: worst-year shortfall first, context cards after
+if worst_shortfall > 0:
+    worst_delta = "today" if worst_year == 0 else f"in year {worst_year}"
+else:
+    worst_delta = "no shortfall"
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Worst-Year Shortfall", f"${worst_shortfall:,.0f}", delta=worst_delta, delta_color="off")
+m2.metric("Current Insurance Gap", f"${df['Gap'][0]:,.0f}")
+m3.metric("New Ladder Coverage", f"${df['Total Coverage'][0]:,.0f}")
+m4.metric("Annual Premium Roll-Off", f"${annual_rolloff:,.0f}/yr", delta="As terms expire", delta_color="off")
 st.caption("💡 Roll-off is the annual premium you stop paying once terms expire inside the model window — it is not a savings comparison against one large policy.")
 
 # --- SCENARIO TOOLS: save, compare, share ---
@@ -361,18 +379,6 @@ with tool3:
     else:
         compare_on = False
         st.caption("Save a scenario to compare two options.")
-
-# --- WORST-YEAR SHORTFALL & RUNG DROP-OFFS (drive the chart markers and the plain-language summary) ---
-shortfall = (df['Gap'] - df['Total Coverage']).clip(lower=0)
-worst_idx = int(shortfall.idxmax())
-worst_shortfall = float(shortfall.iloc[worst_idx])
-worst_year = int(df['Year'].iloc[worst_idx])
-
-# Group rung expiries by year so same-year drops get a single label.
-drop_groups = defaultdict(list)
-for _i, _w in enumerate(policy_widgets, start=1):
-    if _w["active"] and _w["term"] <= MODEL_YEARS:
-        drop_groups[_w["term"]].append((_i, _w["amt"]))
 
 # --- VISUALIZER ---
 fig = go.Figure()
@@ -452,6 +458,19 @@ if saved_df is not None:
     diff0 = int(df['Gap'][0] - saved_df['Gap'][0])
     st.caption(f"🔁 vs. saved scenario — today's gap differs by **${diff0:+,.0f}** "
                f"(saved: ${saved_df['Gap'][0]:,.0f}, current: ${df['Gap'][0]:,.0f}).")
+
+# --- #11 WHAT IS LADDERING? ---
+_rolloff_note = (f" With your current plan, for example, that trims **${int(annual_rolloff):,.0f} a year** "
+                 "as each rung expires.") if annual_rolloff > 0 else ""
+with st.expander("❓ What is laddering?"):
+    st.markdown(
+        "Instead of buying one big 30-year term policy, laddering splits your coverage into two or three "
+        "smaller policies with different term lengths — for example 10, 20, and 30 years. Each rung covers "
+        "you while a major obligation is still unpaid (the mortgage, income replacement, college), then "
+        "expires once that obligation is gone. Short-term policies cost far less per dollar of coverage than "
+        "long ones, so you pay premiums only for the protection you actually need at each stage of life."
+        + _rolloff_note
+    )
 
 # --- #7 PLAIN-LANGUAGE SUMMARY ---
 _active_pols = [p for p in policies if p['amt'] > 0 and p['prem'] > 0]
@@ -534,6 +553,20 @@ pdf_bytes = build_client_pdf(
     insight_plain,
     client_name=client_name,
 )
+
+# #10 — collapsible in-app table: the same data as the CSV, with the worst year highlighted
+with st.expander("📊 View the year-by-year table (same data as the CSV)"):
+    if worst_shortfall > 0:
+        st.caption(f"The highlighted row — year {worst_year} — is where the plan falls furthest short (${worst_shortfall:,.0f}).")
+    st.dataframe(
+        export.style.apply(
+            lambda row: ["background-color: #FEE2E2; color: #1F2937;"] * len(row)
+            if worst_shortfall > 0 and row["Year"] == worst_year else [""] * len(row),
+            axis=1,
+        ),
+        use_container_width=True,
+        height=430,
+    )
 
 csv_col, pdf_col = st.columns(2)
 with csv_col:
