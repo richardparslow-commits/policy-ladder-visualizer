@@ -120,6 +120,8 @@ df = pd.DataFrame(data)
 st.markdown(
     f"""
     <div style="display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin:0.2rem 0 0.4rem 0;">
+        <img src="https://flagcdn.com/w80/us-tx.png" alt="Texas flag"
+             style="height:42px; width:auto; border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,0.2);">
         <h1 style="margin:0; font-size:2.25rem; font-weight:700; line-height:1.4; letter-spacing:-0.02em; color:inherit; font-family:inherit;">
             🛡️ Life Insurance Gap Analysis
         </h1>
@@ -128,6 +130,9 @@ st.markdown(
                   padding:0.5rem 1.1rem; border-radius:0.5rem; white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,0.15);">
             Get a Quote ↗
         </a>
+        <span style="flex:1;"></span>
+        <img src="https://flagcdn.com/w80/us.png" alt="American flag"
+             style="height:42px; width:auto; border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,0.2);">
     </div>
     """,
     unsafe_allow_html=True,

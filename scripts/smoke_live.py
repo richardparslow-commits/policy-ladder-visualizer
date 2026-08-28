@@ -32,6 +32,7 @@ MARKERS = [
 ]
 FORBIDDEN = [m.strip() for m in os.environ.get("FORBIDDEN_MARKERS", "Projected Savings").split(",") if m.strip()]
 AXIS_MAX = os.environ.get("AXIS_MAX", "40")
+IMG_ALTS = [a.strip() for a in os.environ.get("EXPECTED_IMG_ALTS", "Texas flag,American flag").split(",") if a.strip()]
 SHOTS = Path(os.environ.get("SCREENSHOT_DIR", "smoke_shots"))
 TRIGGERED_BY = os.environ.get("TRIGGERED_BY", "")  # "push", "schedule", "workflow_dispatch", ...
 
@@ -70,6 +71,9 @@ def run_checks(app):
     for marker in FORBIDDEN:
         if app.get_by_text(marker, exact=False).count() > 0:
             failures.append(f"stale UI still present: {marker!r}")
+    for alt in IMG_ALTS:
+        if app.locator(f'img[alt="{alt}"]').count() == 0:
+            failures.append(f"missing image with alt text: {alt!r}")
     try:
         ticks = app.evaluate(
             "Array.from(document.querySelectorAll('.js-plotly-plot .xaxislayer-above text')).map(t => t.textContent)"
