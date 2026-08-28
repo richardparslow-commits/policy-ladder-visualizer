@@ -1,5 +1,6 @@
 import json
 import urllib.parse
+from collections import defaultdict
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -361,6 +362,18 @@ with tool3:
         compare_on = False
         st.caption("Save a scenario to compare two options.")
 
+# --- WORST-YEAR SHORTFALL & RUNG DROP-OFFS (drive the chart markers and the plain-language summary) ---
+shortfall = (df['Gap'] - df['Total Coverage']).clip(lower=0)
+worst_idx = int(shortfall.idxmax())
+worst_shortfall = float(shortfall.iloc[worst_idx])
+worst_year = int(df['Year'].iloc[worst_idx])
+
+# Group rung expiries by year so same-year drops get a single label.
+drop_groups = defaultdict(list)
+for _i, _w in enumerate(policy_widgets, start=1):
+    if _w["active"] and _w["term"] <= MODEL_YEARS:
+        drop_groups[_w["term"]].append((_i, _w["amt"]))
+
 # --- VISUALIZER ---
 fig = go.Figure()
 
@@ -393,6 +406,39 @@ if compare_on and saved is not None:
         line=dict(color=ACCENT_GREEN, width=2, dash='dot'),
     ))
 
+# #8 — worst-year shortfall marker: where the ladder falls furthest below the need
+if worst_shortfall > 0:
+    _worst_label = "today" if worst_year == 0 else f"in year {worst_year}"
+    fig.add_trace(go.Scatter(
+        x=[worst_year], y=[float(df['Gap'].iloc[worst_idx])],
+        mode='markers',
+        marker=dict(symbol='star', size=18, color=ACCENT_BLUE,
+                    line=dict(color='#ffffff', width=1.5)),
+        name='Biggest shortfall',
+        hovertemplate=f"Biggest shortfall: ${worst_shortfall:,.0f} {_worst_label}<extra></extra>",
+    ))
+    fig.add_annotation(
+        x=worst_year, y=float(df['Gap'].iloc[worst_idx]),
+        text=f"Biggest shortfall ${worst_shortfall:,.0f} {_worst_label}",
+        showarrow=True, arrowhead=2, ax=60, ay=-55,
+        font=dict(color=ACCENT_BLUE, size=12),
+        bgcolor="rgba(255,255,255,0.9)", bordercolor=ACCENT_BLUE, borderwidth=1,
+    )
+
+# #8 — rung drop-off markers: dashed line + label where each rung expires
+for _term_yr in sorted(drop_groups):
+    _entries = drop_groups[_term_yr]
+    _total = sum(a for _, a in _entries)
+    _nums = ", ".join(str(n) for n, _ in _entries)
+    fig.add_vline(x=_term_yr, line_dash="dash", line_color="#9CA3AF", line_width=1)
+    fig.add_annotation(
+        x=_term_yr, y=float(df['Total Coverage'].iloc[_term_yr - 1]),
+        text=f"Rung {_nums} ends — ${_total:,.0f}",
+        yanchor="bottom", yshift=6, showarrow=False,
+        font=dict(size=11, color=LEGACY_GRAY),
+        bgcolor="rgba(255,255,255,0.9)", bordercolor="#D1D5DB", borderwidth=1,
+    )
+
 fig.update_layout(
     hovermode="x unified", height=600,
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -406,6 +452,56 @@ if saved_df is not None:
     diff0 = int(df['Gap'][0] - saved_df['Gap'][0])
     st.caption(f"🔁 vs. saved scenario — today's gap differs by **${diff0:+,.0f}** "
                f"(saved: ${saved_df['Gap'][0]:,.0f}, current: ${df['Gap'][0]:,.0f}).")
+
+# --- #7 PLAIN-LANGUAGE SUMMARY ---
+_active_pols = [p for p in policies if p['amt'] > 0 and p['prem'] > 0]
+_avg_rate = (sum(p['prem'] for p in _active_pols) / sum(p['amt'] for p in _active_pols)
+             if _active_pols else None)
+_est_prem = (worst_shortfall * _avg_rate) if (_avg_rate and worst_shortfall > 0) else None
+
+_comp_labels = {
+    "Mortgage": "your mortgage is still large",
+    "Debt": "your other debts aren't paid off yet",
+    "Income": "income replacement is still needed",
+    "Childcare": "childcare is still a cost",
+    "College": "college costs are still ahead",
+    "Final Expenses": "final expenses still apply",
+}
+_row = df.iloc[worst_idx]
+_dominant = max(_comp_labels, key=lambda c: _row[c])
+
+_sum = []
+_today_gap = int(df['Gap'][0])
+if _today_gap <= 0:
+    _sum.append("Your current coverage and assets already cover your family's needs — no additional insurance is required today. Life changes, so it's worth re-running this analysis each year.")
+else:
+    _sum.append(f"Your family's biggest need is <b>${_today_gap:,.0f} today</b>.")
+    _sum.append(f"Your ladder covers <b>${int(df['Total Coverage'][0]):,.0f}</b> of it.")
+    if worst_shortfall > 0:
+        _when = "today" if worst_year == 0 else f"in year {worst_year}"
+        _sum.append(f"At its worst — <b>{_when}</b> — the plan is <b>${worst_shortfall:,.0f} short</b>, right when {_comp_labels[_dominant]}.")
+        _rec = f"Adding a <b>${worst_shortfall:,.0f}</b> policy to your ladder would close that gap"
+        if _est_prem:
+            _rec += f" for roughly <b>${_est_prem:,.0f} a year</b>"
+        _sum.append(_rec + ".")
+    else:
+        _sum.append("Your ladder covers the full need — there is <b>no shortfall</b> at any point.")
+    if int(annual_rolloff) > 0:
+        _sum.append(f"Laddering also trims premiums over time — you stop paying <b>${int(annual_rolloff):,.0f}/yr</b> as early rungs expire.")
+if saved_df is not None:
+    _d = _today_gap - int(saved_df['Gap'][0])
+    if _d > 0:
+        _sum.append(f"Compared with your saved scenario, today's gap is <b>${_d:,.0f} higher</b> (saved: ${int(saved_df['Gap'][0]):,.0f}).")
+    elif _d < 0:
+        _sum.append(f"Compared with your saved scenario, today's gap is <b>${-_d:,.0f} lower</b> (saved: ${int(saved_df['Gap'][0]):,.0f}).")
+    else:
+        _sum.append("Compared with your saved scenario, today's gap is <b>unchanged</b>.")
+st.markdown(
+    f"""<div style="background:#f4f6f8; border-left:5px solid {ACCENT_BLUE}; padding:0.85rem 1.1rem; border-radius:6px; margin:0.7rem 0;">
+<b>In plain English:</b> {' '.join(_sum)}
+</div>""",
+    unsafe_allow_html=True,
+)
 
 # --- INSIGHTS ---
 life_expiry_note = f" — but it **expires in year {existing_life_years}**" if existing_life_years <= MODEL_YEARS else ""

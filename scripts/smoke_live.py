@@ -29,7 +29,8 @@ MARKERS = [
         "Years of college to cover,What kind of policy is it,Years left on that policy,"
         "Annual Premium Roll-Off,Client / Family Name,Get a Quote,coverage gap is real,"
         "Download year-by-year table,Download one-page PDF report,"
-        "Start from a preset,Save this scenario,1 · Family",
+        "Start from a preset,Save this scenario,1 · Family,"
+        "In plain English,Biggest shortfall,Rung 1 ends,would close that gap",
     ).split(",") if m.strip()
 ]
 FORBIDDEN = [m.strip() for m in os.environ.get("FORBIDDEN_MARKERS", "Projected Savings").split(",") if m.strip()]
