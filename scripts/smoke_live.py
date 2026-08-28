@@ -26,7 +26,8 @@ MARKERS = [
     m.strip() for m in os.environ.get(
         "EXPECTED_MARKERS",
         "Mortgage Interest Rate,Debt Payoff Years,College Starts In,Years of College to Fund,"
-        "Existing Policy Type,Existing Policy Years Remaining,Annual Premium Roll-Off",
+        "Existing Policy Type,Existing Policy Years Remaining,Annual Premium Roll-Off,"
+        "Download year-by-year table",
     ).split(",") if m.strip()
 ]
 FORBIDDEN = [m.strip() for m in os.environ.get("FORBIDDEN_MARKERS", "Projected Savings").split(",") if m.strip()]

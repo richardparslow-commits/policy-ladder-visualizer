@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from datetime import date
 
 # --- BRANDING & STYLES ---
 PRIMARY_RED = "#CC0700"
@@ -103,6 +104,9 @@ for yr in years:
     data.append({
         "Year": yr,
         "Mortgage": m, "Debt": d, "Income": i, "Childcare": c, "College": college,
+        "Final Expenses": final_expenses,
+        "Total Liabilities": total_liabilities,
+        "Existing Resources": liquid_assets + life_offset,
         "Gap": net_gap, "Total Coverage": total_coverage,
         "Premium": annual_premium
     })
@@ -154,3 +158,28 @@ st.info(f"💡 **Fiduciary Insight:** Your family has **${liquid_assets:,.0f}** 
 
 if df['Total Coverage'][0] < df['Gap'][0]:
     st.warning(f"⚠️ **Coverage Shortfall:** Your proposed ladder is currently **${df['Gap'][0] - df['Total Coverage'][0]:,.0f}** below your calculated need.")
+
+# --- CLIENT EXPORT ---
+export = df.rename(columns={
+    "Year": "Year",
+    "Mortgage": "Mortgage Balance ($)",
+    "Debt": "Other Debt ($)",
+    "Income": "Income Replacement ($)",
+    "Childcare": "Childcare ($)",
+    "College": "College ($)",
+    "Final Expenses": "Final Expenses ($)",
+    "Total Liabilities": "Total Liabilities ($)",
+    "Existing Resources": "Existing Resources ($)",
+    "Gap": "Net Gap - Required Insurance ($)",
+    "Total Coverage": "Proposed Ladder Coverage ($)",
+    "Premium": "Annual Premium ($)",
+}).astype(int)
+
+st.download_button(
+    "📄 Download year-by-year table (CSV)",
+    data=export.to_csv(index=False).encode("utf-8"),
+    file_name=f"gap_analysis_{date.today():%Y-%m-%d}.csv",
+    mime="text/csv",
+    key="csv_export",
+    help="Full year-by-year breakdown of needs vs. coverage, ready for client meetings.",
+)
