@@ -20,11 +20,12 @@ A life-insurance planning tool that:
 
 ## Deployment health
 
-Pushes to `main` auto-deploy to Streamlit Cloud. After every push, the
-**Live deploy smoke test** workflow loads the live app in a headless browser and
-verifies the real UI renders (controls, metrics, and the 0–40 chart). The badge
-at the top shows whether the deployed app is healthy right now; run screenshots
-are attached as artifacts on each run.
+Pushes to `main` auto-deploy to Streamlit Cloud. After every push — and on a
+**nightly schedule** (09:00 UTC) — the **Live deploy smoke test** workflow loads
+the live app in a headless browser and verifies the real UI renders (controls,
+metrics, and the 0–40 chart). The badge at the top shows whether the deployed
+app is healthy right now, including between pushes; run screenshots are attached
+as artifacts on each run.
 
 ## How to run it on your own machine
 

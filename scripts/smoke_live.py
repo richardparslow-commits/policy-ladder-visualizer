@@ -32,6 +32,7 @@ MARKERS = [
 FORBIDDEN = [m.strip() for m in os.environ.get("FORBIDDEN_MARKERS", "Projected Savings").split(",") if m.strip()]
 AXIS_MAX = os.environ.get("AXIS_MAX", "40")
 SHOTS = Path(os.environ.get("SCREENSHOT_DIR", "smoke_shots"))
+TRIGGERED_BY = os.environ.get("TRIGGERED_BY", "")  # "push", "schedule", "workflow_dispatch", ...
 
 
 def log(msg):
@@ -98,8 +99,11 @@ def main():
         page = browser.new_page(viewport={"width": 1440, "height": 1000})
         try:
             if SETTLE_SECONDS:
-                log(f"sleeping {SETTLE_SECONDS}s so Streamlit Cloud can redeploy the fresh push")
-                time.sleep(SETTLE_SECONDS)
+                if TRIGGERED_BY == "schedule":
+                    log("scheduled canary: no push to wait for, skipping settle")
+                else:
+                    log(f"sleeping {SETTLE_SECONDS}s so Streamlit Cloud can redeploy the fresh push")
+                    time.sleep(SETTLE_SECONDS)
 
             log(f"loading {APP_URL}")
             page.goto(APP_URL, timeout=60000, wait_until="domcontentloaded")
