@@ -19,6 +19,23 @@ st.markdown(f"""
     <style>
     .stMetric {{ background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0; border-top: 5px solid {PRIMARY_RED}; }}
     [data-testid="stSidebar"] {{ background-color: #f8f9fa; }}
+    /* App header: flags at the corners, title + CTA beside each other */
+    .app-header {{ display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin:0.2rem 0 0.4rem 0; }}
+    .app-header h1 {{ margin:0; font-size:clamp(1.3rem, 3.6vw, 2.25rem); font-weight:700; line-height:1.4; letter-spacing:-0.02em; color:inherit; font-family:inherit; }}
+    .app-header .flag {{ height:42px; width:auto; border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,0.2); }}
+    .app-header .spacer {{ flex:1; }}
+    .app-cta {{ background:{PRIMARY_RED}; color:#ffffff; text-decoration:none; font-size:0.95rem; font-weight:600; padding:0.5rem 1.1rem; border-radius:0.5rem; white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,0.15); }}
+    /* Phones: flags stay at the corners, title and CTA stack centered below */
+    @media (max-width: 700px) {{
+        .app-header {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }}
+        .app-header .flag {{ height:34px; }}
+        .app-header .flag:first-child {{ grid-column:1; grid-row:1; justify-self:start; }}
+        .app-header .flag:last-child {{ grid-column:2; grid-row:1; justify-self:end; }}
+        .app-header .spacer {{ display:none; }}
+        .app-header > div:has(> h1) {{ grid-column:1 / -1; grid-row:2; width:100%; text-align:center; }}
+        .app-header > div:has(> h1) h1 {{ font-size:1.55rem; }}
+        .app-header .app-cta {{ grid-column:1 / -1; grid-row:3; justify-self:center; font-size:1rem; padding:0.65rem 1.4rem; }}
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -119,20 +136,12 @@ df = pd.DataFrame(data)
 # --- DASHBOARD HEADER ---
 st.markdown(
     f"""
-    <div style="display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin:0.2rem 0 0.4rem 0;">
-        <img src="https://flagcdn.com/w80/us-tx.png" alt="Texas flag"
-             style="height:42px; width:auto; border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,0.2);">
-        <h1 style="margin:0; font-size:2.25rem; font-weight:700; line-height:1.4; letter-spacing:-0.02em; color:inherit; font-family:inherit;">
-            🛡️ Life Insurance Gap Analysis
-        </h1>
-        <a href="https://lifeinsurancebrokeradvocate.com/contact" target="_blank" rel="noopener noreferrer"
-           style="background:{PRIMARY_RED}; color:#ffffff; text-decoration:none; font-size:0.95rem; font-weight:600;
-                  padding:0.5rem 1.1rem; border-radius:0.5rem; white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,0.15);">
-            Get a Quote ↗
-        </a>
-        <span style="flex:1;"></span>
-        <img src="https://flagcdn.com/w80/us.png" alt="American flag"
-             style="height:42px; width:auto; border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,0.2);">
+    <div class="app-header">
+        <img src="https://flagcdn.com/w80/us-tx.png" alt="Texas flag" class="flag">
+        <h1>🛡️ Life Insurance Gap Analysis</h1>
+        <a class="app-cta" href="https://lifeinsurancebrokeradvocate.com/contact" target="_blank" rel="noopener noreferrer">Get a Quote ↗</a>
+        <span class="spacer"></span>
+        <img src="https://flagcdn.com/w80/us.png" alt="American flag" class="flag">
     </div>
     """,
     unsafe_allow_html=True,
