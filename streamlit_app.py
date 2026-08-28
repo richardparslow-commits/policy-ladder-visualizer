@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import date
 
+from pdf_report import build_client_pdf
+
 # --- BRANDING & STYLES ---
 PRIMARY_RED = "#CC0700"
 ACCENT_BLUE = "#1E88E5"
@@ -154,12 +156,13 @@ st.plotly_chart(fig, use_container_width=True)
 
 # --- INSIGHTS ---
 life_expiry_note = f" — but it **expires in year {existing_life_years}**" if existing_life_years <= MODEL_YEARS else ""
-st.info(f"💡 **Fiduciary Insight:** Your family has **${liquid_assets:,.0f}** in liquid resources plus **${existing_life:,.0f}** of existing life coverage{life_expiry_note}. We only need to bridge the remaining **${df['Gap'][0]:,.0f}** today. Using a laddered approach ensures you aren't over-insured as your mortgage, childcare, and college obligations disappear.")
+insight_md = f"💡 **Fiduciary Insight:** Your family has **${liquid_assets:,.0f}** in liquid resources plus **${existing_life:,.0f}** of existing life coverage{life_expiry_note}. We only need to bridge the remaining **${df['Gap'][0]:,.0f}** today. Using a laddered approach ensures you aren't over-insured as your mortgage, childcare, and college obligations disappear."
+st.info(insight_md)
 
 if df['Total Coverage'][0] < df['Gap'][0]:
     st.warning(f"⚠️ **Coverage Shortfall:** Your proposed ladder is currently **${df['Gap'][0] - df['Total Coverage'][0]:,.0f}** below your calculated need.")
 
-# --- CLIENT EXPORT ---
+# --- CLIENT EXPORTS ---
 export = df.rename(columns={
     "Year": "Year",
     "Mortgage": "Mortgage Balance ($)",
@@ -174,12 +177,30 @@ export = df.rename(columns={
     "Total Coverage": "Proposed Ladder Coverage ($)",
     "Premium": "Annual Premium ($)",
 }).astype(int)
+insight_plain = insight_md.replace("💡 ", "").replace("**", "")
 
-st.download_button(
-    "📄 Download year-by-year table (CSV)",
-    data=export.to_csv(index=False).encode("utf-8"),
-    file_name=f"gap_analysis_{date.today():%Y-%m-%d}.csv",
-    mime="text/csv",
-    key="csv_export",
-    help="Full year-by-year breakdown of needs vs. coverage, ready for client meetings.",
+pdf_bytes = build_client_pdf(
+    export,
+    int(df["Gap"][0]), int(df["Total Coverage"][0]), annual_rolloff,
+    insight_plain,
 )
+
+csv_col, pdf_col = st.columns(2)
+with csv_col:
+    st.download_button(
+        "📄 Download year-by-year table (CSV)",
+        data=export.to_csv(index=False).encode("utf-8"),
+        file_name=f"gap_analysis_{date.today():%Y-%m-%d}.csv",
+        mime="text/csv",
+        key="csv_export",
+        help="Full year-by-year breakdown of needs vs. coverage, ready for client meetings.",
+    )
+with pdf_col:
+    st.download_button(
+        "📕 Download one-page PDF report",
+        data=pdf_bytes,
+        file_name=f"gap_analysis_report_{date.today():%Y-%m-%d}.pdf",
+        mime="application/pdf",
+        key="pdf_export",
+        help="Client handout: headline metrics, the gap-vs-ladder chart, and the full year-by-year table on one page.",
+    )
