@@ -47,3 +47,34 @@ jobs:
           name: live-smoke-screenshots
           path: smoke_shots/
           if-no-files-found: ignore
+
+  # Second job: catch layout regressions at desktop, tablet, and phone sizes
+  # before they reach users. Same triggers and settle logic as the smoke job.
+  audit-viewports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install headless browser
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Audit desktop, tablet, and phone layouts of the live app
+        env:
+          APP_URL: https://policy-ladder-visualizer.streamlit.app/
+          TRIGGERED_BY: ${{ github.event_name }}
+        run: python scripts/audit_viewports.py
+
+      - name: Upload audit screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewport-audit-screenshots
+          path: audit_shots/
+          if-no-files-found: ignore

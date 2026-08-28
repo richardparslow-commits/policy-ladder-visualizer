@@ -164,3 +164,6 @@ cython_debug/
 #.idea/
 # local output from scripts/smoke_live.py
 smoke_shots/
+
+# local output from scripts/audit_viewports.py
+audit_shots/
