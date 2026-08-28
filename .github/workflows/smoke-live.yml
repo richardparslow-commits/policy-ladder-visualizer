@@ -1,0 +1,44 @@
+# Verify the live deployment after every push to main.
+#
+# Streamlit Cloud redeploys asynchronously, so the script settles briefly, polls until
+# the app renders, then asserts the current UI markers. A red run here means the live
+# site is broken or serving unexpected content — screenshots are attached as artifacts.
+name: Live deploy smoke test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: smoke-live
+  cancel-in-progress: true
+
+jobs:
+  smoke-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install headless browser
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Wait for redeploy, then verify the live app renders
+        env:
+          APP_URL: https://policy-ladder-visualizer.streamlit.app/
+        run: python scripts/smoke_live.py
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-smoke-screenshots
+          path: smoke_shots/
+          if-no-files-found: ignore
