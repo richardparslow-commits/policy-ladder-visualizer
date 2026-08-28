@@ -89,14 +89,17 @@ def _add_table(fig, rect, block, caption):
     return ax
 
 
-def build_client_pdf(export_df, gap0, coverage0, rolloff, insight_plain, as_pdf=True):
+def build_client_pdf(export_df, gap0, coverage0, rolloff, insight_plain, client_name="", as_pdf=True):
     """Render the one-page report. export_df is the app's labeled/rounded export frame."""
     fig = plt.figure(figsize=(11, 8.5))
 
     # Header
     fig.text(0.06, 0.955, "Life Insurance Gap Analysis", fontsize=17, fontweight="bold",
              color=PRIMARY_RED, ha="left", va="center")
-    fig.text(0.06, 0.925, f"Prepared {date.today():%B %d, %Y}  ·  Needs vs. coverage, year by year",
+    name = client_name.strip()[:48] if client_name else ""
+    prepared = (f"Prepared for {name} · {date.today():%B %d, %Y}" if name
+                else f"Prepared {date.today():%B %d, %Y}")
+    fig.text(0.06, 0.925, f"{prepared}  ·  Needs vs. coverage, year by year",
              fontsize=8, color=INK, ha="left")
 
     # Metric cards

@@ -25,6 +25,7 @@ st.markdown(f"""
 # --- SIDEBAR: FLIGHT PARAMETERS ---
 with st.sidebar:
     st.header("📍 Flight Parameters")
+    client_name = st.text_input("Client / Family Name (optional)", placeholder="e.g., The Smith Family", key="client_name")
     
     with st.expander("🏠 Debt & Mortgage (D&M)", expanded=True):
         mortgage = st.number_input("Remaining Mortgage ($)", value=400000, step=10000)
@@ -183,6 +184,7 @@ pdf_bytes = build_client_pdf(
     export,
     int(df["Gap"][0]), int(df["Total Coverage"][0]), annual_rolloff,
     insight_plain,
+    client_name=client_name,
 )
 
 csv_col, pdf_col = st.columns(2)
