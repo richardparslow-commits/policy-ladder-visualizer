@@ -110,15 +110,21 @@ with st.sidebar:
                 else:
                     st.session_state[k] = v
 
-    preset = st.selectbox(
+    # Apply presets through an on_change callback (Streamlit's sanctioned way to set widget
+    # state) — direct assignment here surfaces a visible framework warning banner per widget.
+    def _apply_preset():
+        chosen = st.session_state.get("preset")
+        if chosen and chosen != "Custom (default)":
+            for k, v in PRESETS[chosen].items():
+                st.session_state[k] = v
+
+    st.selectbox(
         "Start from a preset (optional)",
         list(PRESETS),
         key="preset",
+        on_change=_apply_preset,
         help="Pick a realistic starting point, then adjust any numbers below.",
     )
-    if preset != "Custom (default)":
-        for k, v in PRESETS[preset].items():
-            st.session_state[k] = v
 
     client_name = st.text_input(
         "Client / Family Name (optional)",
@@ -436,7 +442,11 @@ for _term_yr in sorted(drop_groups):
     _entries = drop_groups[_term_yr]
     _total = sum(a for _, a in _entries)
     _nums = ", ".join(str(n) for n, _ in _entries)
-    fig.add_vline(x=_term_yr, line_dash="dash", line_color="#9CA3AF", line_width=1)
+    # Layout shape (not add_vline, which is a silent no-op in Plotly 7): full-height dashed line at the rung's expiry year.
+    fig.add_shape(
+        type="line", x0=_term_yr, x1=_term_yr, y0=0, y1=1, yref="paper",
+        line=dict(dash="dash", color="#9CA3AF", width=1),
+    )
     fig.add_annotation(
         x=_term_yr, y=float(df['Total Coverage'].iloc[_term_yr - 1]),
         text=f"Rung {_nums} ends — ${_total:,.0f}",
@@ -456,8 +466,9 @@ st.plotly_chart(fig, use_container_width=True)
 
 if saved_df is not None:
     diff0 = int(df['Gap'][0] - saved_df['Gap'][0])
-    st.caption(f"🔁 vs. saved scenario — today's gap differs by **${diff0:+,.0f}** "
-               f"(saved: ${saved_df['Gap'][0]:,.0f}, current: ${df['Gap'][0]:,.0f}).")
+    # Escape $ as \$ so Streamlit's markdown doesn't parse the amounts as LaTeX math.
+    st.caption(f"🔁 vs. saved scenario — today's gap differs by **\${diff0:+,.0f}** "
+               f"(saved: \${saved_df['Gap'][0]:,.0f}, current: \${df['Gap'][0]:,.0f}).")
 
 # --- #11 WHAT IS LADDERING? ---
 _rolloff_note = (f" With your current plan, for example, that trims **${int(annual_rolloff):,.0f} a year** "
@@ -524,7 +535,8 @@ st.markdown(
 
 # --- INSIGHTS ---
 life_expiry_note = f" — but it **expires in year {existing_life_years}**" if existing_life_years <= MODEL_YEARS else ""
-insight_md = f"💡 **Fiduciary Insight:** Your family has **${liquid_assets:,.0f}** in liquid resources plus **${existing_life:,.0f}** of existing life coverage{life_expiry_note}. We only need to bridge the remaining **${df['Gap'][0]:,.0f}** today. Using a laddered approach ensures you aren't over-insured as your mortgage, childcare, and college obligations disappear."
+# Escape $ as \$ so Streamlit's markdown doesn't parse the amounts as LaTeX math.
+insight_md = f"💡 **Fiduciary Insight:** Your family has **\${liquid_assets:,.0f}** in liquid resources plus **\${existing_life:,.0f}** of existing life coverage{life_expiry_note}. We only need to bridge the remaining **\${df['Gap'][0]:,.0f}** today. Using a laddered approach ensures you aren't over-insured as your mortgage, childcare, and college obligations disappear."
 st.info(insight_md)
 
 if df['Total Coverage'][0] < df['Gap'][0]:
@@ -545,7 +557,7 @@ export = df.rename(columns={
     "Total Coverage": "Proposed Ladder Coverage ($)",
     "Premium": "Annual Premium ($)",
 }).astype(int)
-insight_plain = insight_md.replace("💡 ", "").replace("**", "")
+insight_plain = insight_md.replace("💡 ", "").replace("**", "").replace("\\$", "$")
 
 pdf_bytes = build_client_pdf(
     export,

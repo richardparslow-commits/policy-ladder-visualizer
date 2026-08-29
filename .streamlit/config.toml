@@ -1,0 +1,7 @@
+# Presets and the shareable-link restore intentionally pre-fill widget values via
+# session_state (the sanctioned on_change pattern). Streamlit then shows a confusing
+# developer-facing warning banner ("The widget with key ... was created with a default
+# value but also had its value set via the Session State API"). Clients should not see
+# that, so suppress it app-wide.
+[global]
+disableWidgetStateDuplicationWarning = true
