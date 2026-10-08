@@ -1,4 +1,4 @@
-# Code review ownership is separate from Community Cloud's GitHub App access.
+# Code review ownership is separate from Community Cloud's GitHub OAuth access.
 * @richardparslow-commits
 /.github/ @richardparslow-commits
 /.streamlit/ @richardparslow-commits

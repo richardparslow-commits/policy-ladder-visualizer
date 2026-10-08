@@ -33,9 +33,11 @@ authentication and access controls, encrypted storage/swap, log redaction,
 retention/deletion, and incident response. Do not enter PHI into this public app.
 See [HHS cloud guidance](https://www.hhs.gov/hipaa/for-professionals/special-topics/health-information-technology/cloud-computing/index.html).
 
-Community Cloud obtains repository access through its authorized GitHub App;
+Community Cloud obtains repository access through its authorized Streamlit OAuth app;
 `@streamlit/community-cloud` in CODEOWNERS neither configures that integration nor
-grants access. Confirm the integration in hosting settings. Configure a GitHub
+grants access. Confirm the integration in hosting settings using the official
+[GitHub connection guidance](https://docs.streamlit.io/deploy/streamlit-community-cloud/get-started/connect-your-github-account).
+Configure a GitHub
 ruleset requiring the Source checks before merging to main. If code-owner approval
 is required, designate an additional eligible reviewer: an author cannot approve
 their own pull request. No repository ruleset or hosting contract is supplied by
