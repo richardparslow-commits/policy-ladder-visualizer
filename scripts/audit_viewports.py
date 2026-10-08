@@ -51,7 +51,7 @@ def audit_viewport(app):
 def exercise_controls(app):
     sidebar=app.locator('[data-testid="stSidebar"]')
     if sidebar.get_attribute('aria-expanded') == 'false':
-        app.locator('[data-testid="stSidebarCollapsedControl"] button').click()
+        app.locator('[data-testid="stExpandSidebarButton"]').click()
         app.wait_for_function("document.querySelector('[data-testid=stSidebar]').getAttribute('aria-expanded') === 'true'", timeout=5000)
     # A collapsed mobile sidebar is also tested by the base layout checks.
     family=sidebar.get_by_role('tab',name='1 · Family',exact=True)
