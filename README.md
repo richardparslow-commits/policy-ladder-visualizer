@@ -70,6 +70,8 @@ controls, saved comparisons and PDF preparation are exercised with synthetic dat
 The live canary runs for this repository's main branch after pushes, nightly at
 09:00 UTC, or on manual dispatch. It waits for a fingerprint of the checked-out
 application source, preventing an older healthy deploy from passing the new run.
+It clicks Community Cloud's explicit wake control when inactivity puts the app
+to sleep, with bounded retries inside the readiness deadline.
 Failed runs retain synthetic screenshots for three days. Both workflows have
 read-only tokens and immutable action references. Community Cloud deployment and
 repository branch rules are configured separately from these workflows.

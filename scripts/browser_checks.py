@@ -42,6 +42,7 @@ def load_app(page):
         raise CheckError("Invalid expected revision")
     page.set_default_timeout(5000)
     last_navigation = 0
+    last_wake_attempt = float("-inf")
     while time.monotonic() < deadline:
         remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
         if time.monotonic() - last_navigation > 15:
@@ -50,6 +51,16 @@ def load_app(page):
             except BrowserTimeout:
                 pass
             last_navigation = time.monotonic()
+        # Community Cloud presents an explicit wake button after inactivity;
+        # reloading alone leaves the app asleep. Use the observed public control
+        # and limit retries within the same overall readiness deadline.
+        wake = page.get_by_role("button", name="Yes, get this app back up!", exact=True)
+        if time.monotonic() - last_wake_attempt > 30 and wake.count() and wake.is_visible():
+            last_wake_attempt = time.monotonic()
+            try:
+                wake.click(timeout=min(3000, max(1, int((deadline - time.monotonic()) * 1000))))
+            except BrowserTimeout:
+                pass
         frame = find_app_frame(page)
         if frame:
             build = frame.locator('#app-build')
