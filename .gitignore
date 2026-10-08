@@ -167,3 +167,20 @@ smoke_shots/
 
 # local output from scripts/audit_viewports.py
 audit_shots/
+
+# Secrets in every common environment variant
+.env.*
+!.env.example
+.streamlit/secrets*.toml
+
+# Client exports and report scratch directories
+reports/
+report_tmp/
+gap_analysis_*.csv
+gap_analysis_report_*.pdf
+*.pdf.tmp
+*.pdf.part
+
+# Browser test output (synthetic fixtures only)
+test-results/
+playwright-report/

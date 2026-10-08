@@ -1,200 +1,100 @@
-"""Responsive viewport audit for the live deployment.
-
-Loads the app at desktop, iPad, and iPhone sizes and fails the build if the
-layout regresses: horizontal overflow, elements escaping the content area,
-header elements colliding, or the flags/title/CTA misplacing on smaller
-screens. Runs in CI as the second job of .github/workflows/smoke-live.yml;
-also runnable locally:
-
-    SETTLE_SECONDS=0 python scripts/audit_viewports.py
-
-The deployed app renders inside Streamlit Cloud's wrapper iframe (URL ends
-with /~/+), so all measurements run against that frame, not the top page.
-Screenshots of each viewport are written under audit_shots/ for debugging.
-"""
+"""Exercise full layout, sidebar and scenario controls at mobile breakpoints."""
 import os
 import sys
-import time
+from itertools import combinations
 from pathlib import Path
-
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from playwright.sync_api import sync_playwright
+from browser_checks import CheckError, load_app, run_checks, screenshot
 
-APP_URL = os.environ.get("APP_URL", "https://policy-ladder-visualizer.streamlit.app/")
-SETTLE_SECONDS = int(os.environ.get("SETTLE_SECONDS", "120"))
-POLL_TIMEOUT_SECONDS = int(os.environ.get("POLL_TIMEOUT_SECONDS", "480"))
-TRIGGERED_BY = os.environ.get("TRIGGERED_BY", "")
-SHOTS = Path(os.environ.get("SCREENSHOT_DIR", "audit_shots"))
-VIEWPORTS = [("desktop", 1440, 900), ("ipad", 768, 1024), ("iphone", 390, 844)]
-CTA_URL = "https://lifeinsurancebrokeradvocate.com/contact"
-
-MEASURE_JS = """
-() => {
-  const box = el => { const r = el.getBoundingClientRect();
-    return {left: Math.round(r.left), right: Math.round(r.right),
-            top: Math.round(r.top), bottom: Math.round(r.bottom),
-            width: Math.round(r.width), height: Math.round(r.height)}; };
-  const tx = document.querySelector('img[alt="Texas flag"]');
-  const us = document.querySelector('img[alt="American flag"]');
-  const h1 = document.querySelector('h1');
-  const cta = document.querySelector('a[href="%CTA_URL%"]');
-  const main = document.querySelector('[data-testid="stMainBlockContainer"]');
-  const mb = main ? main.getBoundingClientRect() : {left: 0, right: window.innerWidth};
-  return {
-    innerW: window.innerWidth,
-    docScrollW: document.documentElement.scrollWidth,
-    tx: tx ? box(tx) : null, us: us ? box(us) : null,
-    h1: h1 ? box(h1) : null, cta: cta ? box(cta) : null,
-    metrics: document.querySelectorAll('[data-testid="stMetricValue"]').length,
-    flagsLoaded: tx && us ? [tx.complete && tx.naturalWidth > 0, us.complete && us.naturalWidth > 0] : [false, false],
-    contentLeft: Math.round(mb.left), contentRight: Math.round(mb.right)
-  };
-}
-""".replace("%CTA_URL%", CTA_URL)
+VIEWPORTS = [("desktop",1440,900,False), ("tablet",768,1024,True),
+             ("small-phone",320,568,True), ("phone",390,844,True),
+             ("landscape",844,390,True), ("below-breakpoint",699,900,False),
+             ("at-breakpoint",700,900,False), ("above-breakpoint",701,900,False)]
+MEASURE_JS = """() => {
+  const box = e => { const r=e.getBoundingClientRect(); return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height}; };
+  const main=document.querySelector('[data-testid="stMainBlockContainer"]');
+  const header=document.querySelector('.app-header');
+  return {width:window.innerWidth, scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),
+    content:main ? box(main) : null,
+    elements:header ? [...header.querySelectorAll('.flag,.title-wrap,.app-cta')].map(box) : [],
+    flags:header ? [...header.querySelectorAll('img')].every(e=>e.complete && e.naturalWidth>0) : false,
+    chart:document.querySelector('[data-testid="stPlotlyChart"]') ? box(document.querySelector('[data-testid="stPlotlyChart"]')) : null};
+}"""
 
 
-def log(msg):
-    print(f"[audit] {msg}", flush=True)
+def overlap(a,b):
+    return min(a['right'],b['right'])-max(a['left'],b['left'])>2 and min(a['bottom'],b['bottom'])-max(a['top'],b['top'])>2
 
 
-def look_like_login(page):
-    if "/-/login" in page.url:
-        return True
-    try:
-        return "sign in" in page.locator("body").inner_text(timeout=3000).lower()
-    except Exception:
-        return False
-
-
-def find_app_frame(page):
-    for f in page.frames:
-        if f.url.rstrip("/").endswith("/~/+"):
-            try:
-                if f.locator('[data-testid="stSidebar"]').count() > 0:
-                    return f
-            except Exception:
-                pass
-    return None
-
-
-def overlap(a, b):
-    return (min(a["right"], b["right"]) - max(a["left"], b["left"]) > 2 and
-            min(a["bottom"], b["bottom"]) - max(a["top"], b["top"]) > 2)
-
-
-def audit_viewport(page, app, name, width, height):
-    issues = []
-    page.set_viewport_size({"width": width, "height": height})
-    page.wait_for_timeout(2500)  # let the app re-layout to the new size
-    m = app.evaluate(MEASURE_JS)
-    if m["metrics"] < 3:
-        issues.append(f"expected >=3 headline metrics, found {m['metrics']}")
-    if m["docScrollW"] > m["innerW"] + 1:
-        issues.append(f"horizontal overflow: document {m['docScrollW']}px > viewport {m['innerW']}px")
-    if not all(m["flagsLoaded"]):
-        issues.append("flag image(s) did not load")
-    for tag in ("tx", "h1", "cta", "us"):
-        e = m[tag]
-        if e is None:
-            issues.append(f"missing header element: {tag}")
-            continue
-        if e["right"] > m["innerW"] + 1 or e["left"] < -1:
-            issues.append(f"{tag} escapes viewport [{e['left']},{e['right']}] vs {m['innerW']}px")
-        if e["right"] > m["contentRight"] + 2 or e["left"] < m["contentLeft"] - 2:
-            issues.append(f"{tag} escapes content area [{e['left']},{e['right']}] vs "
-                          f"[{m['contentLeft']},{m['contentRight']}]")
-    if m["tx"] and m["h1"] and overlap(m["tx"], m["h1"]):
-        issues.append("Texas flag overlaps title")
-    if m["h1"] and m["cta"] and overlap(m["h1"], m["cta"]):
-        issues.append("title overlaps CTA")
-    if m["cta"] and m["us"] and overlap(m["cta"], m["us"]):
-        issues.append("CTA overlaps American flag")
-    if m["tx"] and m["us"] and overlap(m["tx"], m["us"]):
-        issues.append("flags overlap each other")
-
-    if name == "iphone":
-        tx, us, h1, cta = m["tx"], m["us"], m["h1"], m["cta"]
-        if not (tx and us and us["left"] > tx["right"] and abs(us["top"] - tx["top"]) < us["height"]):
-            issues.append("flags not on one row at opposite corners on phone")
-        content_center = (m["contentLeft"] + m["contentRight"]) / 2
-        for tag, e in (("h1", h1), ("cta", cta)):
-            if e and abs(e["left"] + e["width"] / 2 - content_center) > 40:
-                issues.append(f"{tag} not centered on phone (center {e['left'] + e['width'] / 2:.0f} "
-                              f"vs content center {content_center:.0f})")
-    else:
-        if abs(m["us"]["top"] - m["tx"]["top"]) > m["us"]["height"]:
-            issues.append("American flag wrapped off the header row (should stay top-right)")
-        if not (m["us"]["left"] > m["cta"]["right"]):
-            issues.append("American flag not right of the CTA")
-
-    page.screenshot(path=str(SHOTS / f"{name}.png"), full_page=True)
+def audit_viewport(app):
+    m=app.evaluate(MEASURE_JS)
+    issues=[]
+    if m['scroll']>m['width']+1: issues.append('horizontal document overflow')
+    if len(m['elements'])!=4 or not m['content'] or not m['chart']:
+        return issues+['missing layout elements']
+    if not m['flags']: issues.append('flag images are not loaded')
+    for box in m['elements']+[m['chart']]:
+        if box['width']<=0 or box['left'] < -1 or box['right']>m['width']+1:
+            issues.append('element escapes viewport')
+        if box['left']<m['content']['left']-2 or box['right']>m['content']['right']+2:
+            issues.append('element escapes content')
+    for a,b in combinations(m['elements'],2):
+        if overlap(a,b): issues.append('header elements overlap')
+    tx,title,cta,us=m['elements']
+    if m['width']<=700:
+        if abs(tx['top']-us['top'])>2 or tx['right']>=us['left']: issues.append('phone flags are not at opposite corners')
+        if title['top']<tx['bottom']-1 or cta['top']<title['bottom']-1: issues.append('phone header rows collide')
     return issues
 
 
+def exercise_controls(app):
+    sidebar=app.locator('[data-testid="stSidebar"]')
+    if not sidebar.is_visible():
+        app.locator('[data-testid="stSidebarCollapsedControl"] button').click()
+        sidebar.wait_for(state='visible')
+    # A collapsed mobile sidebar is also tested by the base layout checks.
+    family=sidebar.get_by_role('tab',name='1 · Family',exact=True)
+    family.click()
+    sidebar.get_by_label('Yearly income your family would need',exact=True).fill('80000')
+    sidebar.get_by_label('Yearly income your family would need',exact=True).press('Enter')
+    app.get_by_role('button',name='📌 Save this scenario',exact=True).click()
+    app.get_by_text('Compare with saved',exact=True).click()
+    app.get_by_role('button',name='🧹 Clear this session',exact=True).click()
+    app.get_by_role('button',name='Prepare PDF report',exact=True).click()
+    app.get_by_role('button',name='📕 Download PDF report',exact=True).wait_for(timeout=30000)
+
+
 def main():
+    browser_name=os.environ.get('TEST_BROWSER','chromium')
+    if browser_name not in {'chromium','webkit'}: raise CheckError('Unsupported browser')
     with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        browser=getattr(p,browser_name).launch()
+        failed=False
         try:
-            if SETTLE_SECONDS:
-                if TRIGGERED_BY == "schedule":
-                    log("scheduled run: skipping settle")
-                else:
-                    log(f"sleeping {SETTLE_SECONDS}s so Streamlit Cloud can redeploy")
-                    time.sleep(SETTLE_SECONDS)
-            log(f"loading {APP_URL}")
-            page.goto(APP_URL, timeout=60000, wait_until="domcontentloaded")
-
-            deadline = time.time() + POLL_TIMEOUT_SECONDS
-            app, poll = None, 0
-            while time.time() < deadline:
-                app = find_app_frame(page)
-                if app:
-                    break
-                poll += 1
-                if look_like_login(page):
-                    log(f"poll {poll}: Cloud served the login bounce; clearing cookies and re-navigating")
-                    try:
-                        page.context.clear_cookies()
-                    except Exception:
-                        pass
-                    try:
-                        page.goto(APP_URL, timeout=60000, wait_until="domcontentloaded")
-                    except Exception as e:
-                        log(f"re-navigate failed: {e}")
-                else:
-                    log(f"poll {poll}: app not rendering yet; waiting 20s")
-                    time.sleep(20)
-                    if poll % 4 == 0:
-                        try:
-                            page.reload(wait_until="domcontentloaded")
-                        except Exception:
-                            pass
-            if app is None:
-                log("FAIL: app never rendered (no app iframe with a sidebar)")
-                sys.exit(1)
-            try:
-                app.wait_for_selector('[data-testid="stMetricValue"]', timeout=90000)
-            except Exception:
-                log("FAIL: app frame appeared but never rendered metrics")
-                sys.exit(1)
-
-            SHOTS.mkdir(parents=True, exist_ok=True)
-            all_issues = {}
-            for name, w, h in VIEWPORTS:
-                issues = audit_viewport(page, app, name, w, h)
-                all_issues[name] = issues
-                status = "OK" if not issues else "ISSUES"
-                log(f"{name:8s} {w}x{h}: {status}")
-                for i in issues:
-                    log(f"         - {i}")
-
-            if any(all_issues.values()):
-                log("FAIL: viewport audit found layout issues (screenshots in audit_shots/)")
-                sys.exit(1)
-            log("PASS: layout clean at desktop, iPad, and iPhone sizes")
+            for name,w,h,mobile in VIEWPORTS:
+                context=browser.new_context(viewport={'width':w,'height':h},is_mobile=mobile,has_touch=mobile,
+                                            device_scale_factor=2 if mobile else 1)
+                page=context.new_page()
+                try:
+                    app=load_app(page)
+                    page.wait_for_timeout(200)  # one bounded layout stabilization
+                    issues=run_checks(app)+audit_viewport(app)
+                    if name in {'desktop','phone'}:
+                        exercise_controls(app)
+                    if issues: raise CheckError('; '.join(issues))
+                    print(f'PASS: {browser_name} {name} {w}x{h}')
+                except Exception as exc:
+                    failed=True
+                    print(f'FAIL: {browser_name} {name} ({type(exc).__name__})')
+                finally:
+                    try: screenshot(page,name,os.environ.get('SCREENSHOT_DIR','audit_shots'))
+                    except Exception: print('Screenshot unavailable')
+                    context.close()
         finally:
             browser.close()
+        return int(failed)
 
 
-if __name__ == "__main__":
-    main()
+if __name__=='__main__':
+    raise SystemExit(main())

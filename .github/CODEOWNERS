@@ -1,1 +1,5 @@
-* @streamlit/community-cloud
+# Code review ownership is separate from Community Cloud's GitHub App access.
+* @richardparslow-commits
+/.github/ @richardparslow-commits
+/.streamlit/ @richardparslow-commits
+/.devcontainer/ @richardparslow-commits

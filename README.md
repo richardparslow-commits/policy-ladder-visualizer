@@ -1,42 +1,73 @@
 # 🛡️ Life Policy Pilot | Gap Analysis Pro
 
-[![Live deploy smoke test](https://github.com/richardparslow-commits/policy-ladder-visualizer/actions/workflows/smoke-live.yml/badge.svg?branch=main)](https://github.com/richardparslow-commits/policy-ladder-visualizer/actions/workflows/smoke-live.yml)
+[![Source checks](https://github.com/richardparslow-commits/policy-ladder-visualizer/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/richardparslow-commits/policy-ladder-visualizer/actions/workflows/ci.yml)
+[![Live deployment](https://github.com/richardparslow-commits/policy-ladder-visualizer/actions/workflows/smoke-live.yml/badge.svg?branch=main)](https://github.com/richardparslow-commits/policy-ladder-visualizer/actions/workflows/smoke-live.yml)
 
-**Live app:** https://policy-ladder-visualizer.streamlit.app/
+[Live app](https://policy-ladder-visualizer.streamlit.app/)
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://policy-ladder-visualizer.streamlit.app/)
+The app models the capital needed at the beginning of each year to fund remaining
+income, childcare and tuition, pay remaining mortgage/debt and final expenses,
+then offsets constant liquid assets and existing insurance while it is in force.
+Amounts use today's dollars with zero assumed return, inflation and taxes. Other
+debt is paid down linearly; the mortgage uses monthly amortization. College funds
+are reserved before college begins and decline as tuition is paid. These explicit
+simplifications are planning assumptions, not a personalized recommendation.
 
-A life-insurance planning tool that:
+Up to three proposed policies start today. A term N covers years 0 through N−1;
+permanent coverage is modeled through year 40. Same-year expiries aggregate.
+Premiums are entered annual quotes, summed only while policies remain in force.
+No health-class rating or blended premium estimate is supplied. Roll-off measures
+premiums that stop at expiry; it does not measure savings versus another policy.
 
-1. **Gap Analysis** — calculates, year by year, the difference between a family's
-   projected financial needs (income replacement, mortgage payoff, other debts,
-   future college tuition, childcare, final expenses) and the financial resources
-   or existing insurance coverage available — with real mortgage amortization and
-   expiring term policies modeled honestly.
-2. **Policy Laddering Visualization** — models a "ladder" of smaller term policies
-   (e.g., 10/20/30-year terms) instead of one large 30-year policy, and maps how
-   total coverage steps down over time as major obligations are paid off, so
-   premium cost matches the duration of each liability.
+Save and compare scenarios within a session. Clear this session discards saved
+inputs and prepared reports. URL scenario sharing and client-name collection have
+been removed. Reports are prepared on demand as a three-page PDF with a readable
+full table; CSV export retains rounded dollar values. See [data handling and
+hosting limits](PRIVACY.md) before using real client information.
 
-## Deployment health
+## Run locally
 
-Pushes to `main` auto-deploy to Streamlit Cloud. After every push — and on a
-**nightly schedule** (09:00 UTC) — the **Live deploy smoke test** workflow loads
-the live app in a headless browser and verifies the real UI renders (controls,
-metrics, and the 0–40 chart). The badge at the top shows whether the deployed
-app is healthy right now, including between pushes; run screenshots are attached
-as artifacts on each run.
+Use Python 3.12 or 3.13.
 
-## How to run it on your own machine
+```sh
+python -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r requirements.txt
+.venv/bin/python -m streamlit run streamlit_app.py
+```
 
-1. Install the requirements:
+The devcontainer pins a Python 3.12 image digest, uses the non-root vscode user,
+installs into a virtual environment, and stops setup if installation fails. Start
+the app manually using the same command. Keep forwarded ports private. When using
+a remote forwarded hostname, set `--browser.serverAddress` to that hostname so
+CORS validation matches the deployment; retain CORS and XSRF protection.
 
-   ```
-   $ pip install -r requirements.txt
-   ```
+## Verify and update dependencies
 
-2. Run the app:
+```sh
+.venv/bin/python -m pip install --require-hashes -r requirements-dev.txt
+.venv/bin/python -m pip check
+.venv/bin/python -m pytest -q
+.venv/bin/python -m pip_audit --no-deps --disable-pip -r requirements.txt
+```
 
-   ```
-   $ streamlit run streamlit_app.py
-   ```
+Locks include direct and transitive dependencies, hashes and cross-platform
+markers. To intentionally refresh them, install uv 0.12.23 and run:
+
+```sh
+uv pip compile --universal --python-version 3.12 --generate-hashes requirements.in -o requirements.txt
+uv pip compile --universal --python-version 3.12 --generate-hashes requirements-dev.in -o requirements-dev.txt
+```
+
+Re-run tests and the vulnerability scan after updating. No automatic upgrade or
+unhashed extra install runs during container startup.
+
+Source checks run mathematical, Streamlit session, PDF lifecycle and deadline
+tests, followed by Chromium and WebKit responsive checks against a local server.
+Desktop, tablet, small phone, phone, landscape and widths 699/700/701 are covered;
+controls, saved comparisons and PDF preparation are exercised with synthetic data.
+The live canary runs for this repository's main branch after pushes, nightly at
+09:00 UTC, or on manual dispatch. It waits for a fingerprint of the checked-out
+application source, preventing an older healthy deploy from passing the new run.
+Failed runs retain synthetic screenshots for three days. Both workflows have
+read-only tokens and immutable action references. Community Cloud deployment and
+repository branch rules are configured separately from these workflows.
