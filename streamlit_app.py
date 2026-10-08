@@ -139,7 +139,7 @@ with st.sidebar:
     with tab_family:
         income_req = st.number_input(
             "Yearly income your family would need", min_value=0, max_value=MAX_MONEY, value=None, step=5000, key="income_req",
-            help="What your family would need each year if you were gone — usually the income you earn.",
+            help="Annual living budget after the mortgage and other debts are paid. Exclude childcare, college and final expenses entered separately. Deduct surviving-family income before entering this figure.",
         )
         income_years = st.slider(
             "How many years it must last", 5, 30, key="income_years",
@@ -483,7 +483,7 @@ st.markdown(
 # --- INSIGHTS ---
 life_expiry_note = f" — but it **expires in year {existing_life_years}**" if existing_life_years <= MODEL_YEARS else ""
 # Escape $ as \\$ so Streamlit's markdown doesn't parse the amounts as LaTeX math.
-insight_md = f"💡 **Fiduciary Insight:** Your family has **\\${liquid_assets:,.0f}** in liquid resources plus **\\${existing_life:,.0f}** of existing life coverage{life_expiry_note}. We only need to bridge the remaining **\\${df['Gap'][0]:,.0f}** today. Compare the full timeline before selecting policy amounts and durations."
+insight_md = f"💡 **Planning Insight:** Your family has **\\${liquid_assets:,.0f}** in liquid resources plus **\\${existing_life:,.0f}** of existing life coverage{life_expiry_note}. We only need to bridge the remaining **\\${df['Gap'][0]:,.0f}** today. Compare the full timeline before selecting policy amounts and durations."
 st.info(insight_md)
 
 if df['Total Coverage'][0] < df['Gap'][0]:

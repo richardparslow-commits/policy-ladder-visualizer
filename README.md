@@ -8,6 +8,8 @@
 The app models the capital needed at the beginning of each year to fund remaining
 income, childcare and tuition, pay remaining mortgage/debt and final expenses,
 then offsets constant liquid assets and existing insurance while it is in force.
+The annual income need is the living budget after debt payoff: exclude separately
+entered childcare, tuition and final expenses, and deduct surviving-family income.
 Amounts use today's dollars with zero assumed return, inflation and taxes. Other
 debt is paid down linearly; the mortgage uses monthly amortization. College funds
 are reserved before college begins and decline as tuition is paid. These explicit
