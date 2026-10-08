@@ -54,3 +54,17 @@ def test_term_after_permanent_preset_is_valid():
     app.selectbox(key='existing_life_type').select('Term (expires)').run()
     assert not app.exception
     assert 1<=app.slider(key='existing_life_years').value<=40
+
+
+def test_zero_today_still_warns_about_future_expiry_gap():
+    app=AppTest.from_file(APP,default_timeout=30).run()
+    for key in ['mortgage','other_debt','income_req','childcare_annual','college_total','liquid_assets']:
+        app.number_input(key=key).set_value(0)
+    app.checkbox(key='act1').set_value(False)
+    app.run()
+    assert app.metric[1].value=='$0'
+    assert app.metric[0].value=='$20,000'
+    summary=' '.join(m.value for m in app.markdown)
+    assert 'The largest remaining shortfall' in summary
+    assert 'in year 10' in summary
+    assert not app.exception

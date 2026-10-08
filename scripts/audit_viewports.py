@@ -50,14 +50,16 @@ def audit_viewport(app):
 
 def exercise_controls(app):
     sidebar=app.locator('[data-testid="stSidebar"]')
-    if not sidebar.is_visible():
+    if sidebar.get_attribute('aria-expanded') == 'false':
         app.locator('[data-testid="stSidebarCollapsedControl"] button').click()
-        sidebar.wait_for(state='visible')
+        app.wait_for_function("document.querySelector('[data-testid=stSidebar]').getAttribute('aria-expanded') === 'true'", timeout=5000)
     # A collapsed mobile sidebar is also tested by the base layout checks.
     family=sidebar.get_by_role('tab',name='1 · Family',exact=True)
     family.click()
     sidebar.get_by_label('Yearly income your family would need',exact=True).fill('80000')
     sidebar.get_by_label('Yearly income your family would need',exact=True).press('Enter')
+    sidebar.locator('[data-testid="stSidebarCollapseButton"] button').click()
+    app.wait_for_function("document.querySelector('[data-testid=stSidebar]').getAttribute('aria-expanded') === 'false'", timeout=5000)
     app.get_by_role('button',name='📌 Save this scenario',exact=True).click()
     app.get_by_text('Compare with saved',exact=True).click()
     app.get_by_role('button',name='🧹 Clear this session',exact=True).click()
@@ -87,6 +89,7 @@ def main():
                 except Exception as exc:
                     failed=True
                     print(f'FAIL: {browser_name} {name} ({type(exc).__name__})')
+                    if isinstance(exc, CheckError): print(str(exc))
                 finally:
                     try: screenshot(page,name,os.environ.get('SCREENSHOT_DIR','audit_shots'))
                     except Exception: print('Screenshot unavailable')
