@@ -179,7 +179,7 @@ def build_client_pdf(export_df, gap0, coverage0, rolloff, insight_plain, client_
     try:
         with tempfile.TemporaryDirectory(prefix="policy-fonts-") as cache:
             env = os.environ.copy()
-            env.update(MPLCONFIGDIR=cache, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MPLBACKEND="Agg")
+            env.update(MPLCONFIGDIR=cache, OPENBLAS_NUM_THREADS="1", OMP_NUM_THREADS="1", MPLBACKEND="Agg", PATH="/usr/bin:/bin")
             process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--worker"],
                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env)
             try:
