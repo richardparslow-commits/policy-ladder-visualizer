@@ -86,7 +86,7 @@ def load_app(page):
             if build.count() and build.get_attribute("data-revision") == expected:
                 try:
                     frame.wait_for_function(
-                        "document.querySelector('.js-plotly-plot')?._fullLayout?.xaxis?.range?.[1] === 40",
+                        "[...document.querySelectorAll('.js-plotly-plot')].length === 2 && [...document.querySelectorAll('.js-plotly-plot')].every(e => e._fullLayout?.xaxis?.range?.[1] === 40)",
                         timeout=min(
                             5000, max(1, int((deadline - time.monotonic()) * 1000))
                         ),
@@ -111,8 +111,12 @@ def run_checks(app):
             failures.append("application exception is visible")
     if app.locator('[data-testid="stMetricValue"]').count() != 4:
         failures.append("expected four metrics")
-    chart = app.locator(".js-plotly-plot")
-    if chart.count() != 1 or chart.evaluate("e => e._fullLayout.xaxis.range[1]") != 40:
+    # Main ladder chart plus comparison chart; both must use the 40-year horizon.
+    charts = app.locator(".js-plotly-plot")
+    if charts.count() != 2 or any(
+        charts.nth(i).evaluate("e => e._fullLayout.xaxis.range[1]") != 40
+        for i in range(2)
+    ):
         failures.append("chart horizon is incorrect")
     for text in (
         "Worst-Year Shortfall",
