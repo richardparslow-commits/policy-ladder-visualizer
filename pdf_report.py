@@ -48,7 +48,7 @@ class _BoundedBuffer(io.BytesIO):
 
 
 def _validate_payload(payload):
-    if not isinstance(payload, dict) or set(payload) != {"rows", "gap0", "coverage0", "rolloff", "insight", "as_pdf"}:
+    if not isinstance(payload, dict) or set(payload) != {"rows", "gap0", "coverage0", "rolloff", "insight", "as_pdf", "real_rate_pct"}:
         raise ReportError("Invalid report fields")
     rows = payload["rows"]
     if not isinstance(rows, list) or len(rows) != 41:
@@ -65,6 +65,9 @@ def _validate_payload(payload):
         value = payload[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1_000_000_000:
             raise ReportError("Invalid report metric")
+    rate = payload["real_rate_pct"]
+    if isinstance(rate, bool) or not isinstance(rate, (int, float)) or not math.isfinite(rate) or not 0 <= rate <= 10:
+        raise ReportError("Invalid report metric")
     if type(payload["as_pdf"]) is not bool or not isinstance(payload["insight"], str) or len(payload["insight"]) > 800:
         raise ReportError("Invalid report text")
     if any(ord(c) < 32 and c not in "\n\t" for c in payload["insight"]):
@@ -103,10 +106,14 @@ def _summary_figure(frame, payload, Figure, patches):
         fig.text(x + .01, .825, label, fontsize=8, color=INK)
         fig.text(x + .01, .79, value, fontsize=10, weight="bold", color=INK)
     _draw_chart(fig.add_axes([.10, .31, .84, .38]), frame)
-    assumptions = ("Remaining obligations are funded in today's dollars, with zero assumed investment return, "
-                   "inflation or taxes. Assets remain constant. All policies start today and are assumed in force "
-                   "until expiry. Premiums are entered quotes, not underwriting estimates. Roll-off is not a "
-                   "comparison with the cost of a single policy. Detailed figures follow on pages 2 and 3.")
+    if payload["real_rate_pct"] > 0:
+        funding = (f"Remaining income and college are discounted to today's dollars at a "
+                   f"{payload['real_rate_pct']:g}% inflation-adjusted return; childcare is funded in full. ")
+    else:
+        funding = ("Remaining obligations are funded in today's dollars, with zero assumed investment return. ")
+    assumptions = (funding + "No inflation or taxes are assumed. Assets remain constant. All policies start today "
+                   "and are assumed in force until expiry. Premiums are entered quotes, not underwriting estimates. "
+                   "Roll-off is not a comparison with the cost of a single policy. Detailed figures follow on pages 2 and 3.")
     fig.text(.06, .20, textwrap.fill(assumptions, 125), fontsize=9, color=INK, va="top")
     fig.text(.06, .105, textwrap.fill(payload["insight"], 125), fontsize=8, color=INK, va="top")
     return fig
@@ -156,7 +163,8 @@ def _render(payload):
                 fig.clear()
 
 
-def build_client_pdf(export_df, gap0, coverage0, rolloff, insight_plain, client_name="", as_pdf=True):
+def build_client_pdf(export_df, gap0, coverage0, rolloff, insight_plain, client_name="", as_pdf=True,
+                     real_rate_pct=0.0):
     """Return a 3-page PDF (or summary PNG). One worker per server process.
 
     No global data cache. At capacity, fail promptly instead of queuing clients.
@@ -169,7 +177,7 @@ def build_client_pdf(export_df, gap0, coverage0, rolloff, insight_plain, client_
         raise ReportError("Report dimensions exceed supported bounds")
     payload = {"rows": export_df.to_dict(orient="records"), "gap0": float(gap0),
                "coverage0": float(coverage0), "rolloff": float(rolloff),
-               "insight": insight_plain, "as_pdf": as_pdf}
+               "insight": insight_plain, "as_pdf": as_pdf, "real_rate_pct": float(real_rate_pct)}
     _validate_payload(payload)
     raw = json.dumps(payload, allow_nan=False).encode("utf-8")
     if len(raw) > MAX_INPUT_BYTES:

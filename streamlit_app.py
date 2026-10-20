@@ -3,10 +3,11 @@ from collections import defaultdict
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from datetime import date, datetime
 
 from pdf_report import build_client_pdf, ReportError
-from model import build_df, MODEL_YEARS, MAX_MONEY
+from model import build_df, optimal_ladder, MODEL_YEARS, MAX_MONEY
 from build_info import app_revision
 
 # --- BRANDING & STYLES ---
@@ -14,7 +15,7 @@ PRIMARY_RED = "#CC0700"
 ACCENT_BLUE = "#1E88E5"
 ACCENT_GREEN = "#2E7D32"
 LEGACY_GRAY = "#374151"
-MODEL_VERSION = "remaining-needs-v1"
+MODEL_VERSION = "remaining-needs-v3"
 
 st.set_page_config(page_title="Life Policy Pilot | Gap Analysis Pro", layout="wide")
 
@@ -89,6 +90,7 @@ DEFAULTS = {
     "mortgage": 400000, "mtg_years": 20, "other_debt": 25000,
     "liquid_assets": 50000, "existing_life": 100000, "mtg_rate": 6.0,
     "debt_years": 5, "existing_life_type": "Term (expires)", "existing_life_years": 10,
+    "real_rate_pct": 0.0,
 }
 for slot in range(1, 4):
     DEFAULTS.update({f"act{slot}": slot == 1, f"amt{slot}": 250000 if slot == 1 else 0,
@@ -103,6 +105,30 @@ def reset_session():
         del st.session_state[key]
     for key, value in DEFAULTS.items():
         st.session_state[key] = value
+
+
+def auto_build_ladder():
+    # Runs before the rerun, so it reads the gap from the last render, which matches the
+    # inputs the user is looking at. Premiums are left as entered: the model does not price policies.
+    gap = st.session_state.get("ladder_gap")
+    if not gap:
+        st.session_state["ladder_note"] = ("error", "Enter the family's numbers first, then build the ladder.")
+        return
+    try:
+        ladder, _excess = optimal_ladder(gap)
+    except ValueError as exc:
+        st.session_state["ladder_note"] = ("error", str(exc))
+        return
+    for slot, rung in enumerate(ladder, start=1):
+        amt = int(rung["amt"])
+        st.session_state[f"act{slot}"] = amt > 0
+        st.session_state[f"amt{slot}"] = amt
+        if rung["term"] > MODEL_YEARS:
+            st.session_state[f"type{slot}"] = "Permanent (whole life)"
+        else:
+            st.session_state[f"type{slot}"] = "Term"
+            st.session_state[f"term{slot}"] = rung["term"]
+    st.session_state["ladder_note"] = ("success", "Ladder built: three slots now cover the modeled gap in every year with the least extra coverage. Enter each policy's yearly cost.")
 
 
 with st.sidebar:
@@ -142,7 +168,7 @@ with st.sidebar:
             help="Annual living budget after the mortgage and other debts are paid. Exclude childcare, college and final expenses entered separately. Deduct surviving-family income before entering this figure.",
         )
         income_years = st.slider(
-            "How many years it must last", 5, 30, key="income_years",
+            "How many years it must last", 0, 30, key="income_years",
             help="Often until the kids are independent or your spouse retires.",
         )
         childcare_annual = st.number_input(
@@ -176,7 +202,7 @@ with st.sidebar:
             help="What you still owe on your home today.",
         )
         mtg_years = st.slider(
-            "Years left on your mortgage", 5, 30, key="mtg_years",
+            "Years left on your mortgage", 1, 30, key="mtg_years",
             help="How many years remain on your mortgage.",
         )
         other_debt = st.number_input(
@@ -219,12 +245,26 @@ with st.sidebar:
                                        "prem": p_prem, "term": p_term})
                 if p_active:
                     policies.append({"amt": p_amt, "term": p_term, "prem": p_prem})
+        st.button("🪜 Auto-build optimal ladder", key="auto_ladder", width="stretch",
+                  on_click=auto_build_ladder,
+                  help="Sets the three slots to cover the family's gap in every year with the least extra coverage. Premiums are not changed.")
+        ladder_note = st.session_state.pop("ladder_note", None)
+        if ladder_note:
+            kind, text = ladder_note
+            if kind == "success":
+                st.success(text)
+            else:
+                st.error(text)
 
     with tab_advanced:
+        real_rate_pct = st.slider(
+            "Inflation-adjusted return (%)", 0.0, 10.0, step=0.25, key="real_rate_pct",
+            help="Optional. Discounts future income and college costs to today's dollars. At 0 nothing is discounted. Use a realistic net real return, after inflation and fees.",
+        )
         mtg_rate = st.number_input(
             "Your mortgage interest rate (%)", value=None, min_value=0.0, max_value=25.0,
             step=0.125, format="%.3f", key="mtg_rate",
-            help="Used to calculate the real remaining mortgage balance over time. Check your statement.",
+            help="Used to calculate the real remaining mortgage balance over time. Check your statement. Leave blank if you have no mortgage.",
         )
         debt_years = st.slider(
             "Years until those debts are paid off", 1, 15, key="debt_years",
@@ -248,11 +288,14 @@ with st.sidebar:
 try:
     df = build_df(mortgage, mtg_rate, mtg_years, other_debt, debt_years, income_req, income_years,
                   college_total, college_start, college_years, childcare_annual, childcare_years,
-                  final_expenses, liquid_assets, existing_life, existing_life_years, policies)
+                  final_expenses, liquid_assets, existing_life, existing_life_years, policies,
+                  real_rate_pct=real_rate_pct)
 except ValueError as exc:
+    st.session_state.pop("ladder_gap", None)  # Never build a ladder from inputs no longer shown.
     st.error(str(exc))  # Validators include only field names, never input values.
     st.stop()
 
+st.session_state["ladder_gap"] = [float(g) for g in df["Gap"]]
 
 # --- WORST-YEAR SHORTFALL & RUNG DROP-OFFS (drive the headline card, chart markers, and summary) ---
 shortfall = (df['Gap'] - df['Total Coverage']).clip(lower=0)
@@ -278,6 +321,7 @@ def snapshot_inputs():
         "liquid_assets": liquid_assets, "existing_life": existing_life,
         "existing_life_type": existing_life_type, "existing_life_years": existing_life_years,
         "policies": policy_widgets,
+        "real_rate_pct": real_rate_pct,
     }
 
 
@@ -286,7 +330,7 @@ def df_from_snapshot(snap):
         "mortgage", "mtg_rate", "mtg_years", "other_debt", "debt_years", "income_req",
         "income_years", "college_total", "college_start", "college_years",
         "childcare_annual", "childcare_years", "final_expenses", "liquid_assets",
-        "existing_life", "existing_life_years")}
+        "existing_life", "existing_life_years", "real_rate_pct")}
     saved_policies = [{"amt": p["amt"], "term": p["term"], "prem": p["prem"]}
                       for p in snap.get("policies", []) if p.get("active")]
     return build_df(policies=saved_policies, **kw)
@@ -305,7 +349,12 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-st.caption("Planning assumptions: remaining income, childcare and tuition are funded in full in today’s dollars; no inflation, investment return or taxes are assumed. Assets stay constant. All policies start today and are assumed in force until expiry. Premiums are your entered annual quotes, not underwriting estimates.")
+if real_rate_pct > 0:
+    income_note = (f"remaining income and college are discounted to today’s dollars at a {real_rate_pct:g}% "
+                   "inflation-adjusted return, childcare is funded in full, and no inflation or taxes are assumed")
+else:
+    income_note = "remaining income, childcare and tuition are funded in full in today’s dollars; no inflation, investment return or taxes are assumed"
+st.caption(f"Planning assumptions: {income_note}. Assets stay constant. All policies start today and are assumed in force until expiry. Premiums are your entered annual quotes, not underwriting estimates.")
 st.markdown(f'<span id="app-build" data-revision="{app_revision()}" hidden></span>', unsafe_allow_html=True)
 
 annual_rolloff = df['Premium'].iloc[0] - df['Premium'].iloc[-1]
@@ -427,6 +476,43 @@ if saved_df is not None:
     st.caption(f"🔁 vs. saved scenario — today's gap differs by **\\${diff0:+,.0f}** "
                f"(saved: \\${saved_df['Gap'][0]:,.0f}, current: \\${df['Gap'][0]:,.0f}).")
 
+# --- 0% VS 5% COMPARISON: the same plan at both discount rates, side by side on a shared dollar scale ---
+rate_views = []
+for _rate in (0.0, 5.0):
+    _rdf = build_df(mortgage, mtg_rate, mtg_years, other_debt, debt_years, income_req, income_years,
+                    college_total, college_start, college_years, childcare_annual, childcare_years,
+                    final_expenses, liquid_assets, existing_life, existing_life_years, policies,
+                    real_rate_pct=_rate)
+    _peak = float((_rdf['Gap'] - _rdf['Total Coverage']).clip(lower=0).max())
+    rate_views.append((_rate, _rdf, _peak))
+
+cmp_titles = [
+    f"{_r:g}% (no discounting)" if _r == 0 else f"{_r:g}% inflation-adjusted return"
+    for _r, _, _ in rate_views
+]
+cmp_fig = make_subplots(
+    rows=1, cols=2, shared_yaxes=True, horizontal_spacing=0.05,
+    subplot_titles=[f"{t} · peak net shortfall ${p:,.0f}" for t, (_, _, p) in zip(cmp_titles, rate_views)],
+)
+for _col, (_r, _rdf, _p) in enumerate(rate_views, start=1):
+    cmp_fig.add_trace(go.Scatter(
+        x=_rdf['Year'], y=_rdf['Gap'], name='Required Insurance (Gap)',
+        fill='tozeroy', mode='none', fillcolor='#D1D5DB', showlegend=_col == 1,
+    ), row=1, col=_col)
+    cmp_fig.add_trace(go.Scatter(
+        x=_rdf['Year'], y=_rdf['Total Coverage'], name='Proposed Policy Ladder',
+        line=dict(color=PRIMARY_RED, width=4, shape='hv'), mode='lines', showlegend=_col == 1,
+    ), row=1, col=_col)
+cmp_fig.update_layout(
+    hovermode="x unified", height=420, margin=dict(t=90),
+    legend=dict(orientation="h", yanchor="bottom", y=1.08, xanchor="right", x=1),
+)
+cmp_fig.update_yaxes(title_text="Dollar Amount ($)", gridcolor="#f0f0f0", col=1)
+cmp_fig.update_xaxes(title_text="Years into Future", range=[0, MODEL_YEARS])
+st.plotly_chart(cmp_fig, width="stretch")
+st.caption("Same policies, same inputs; only the discount rate changes. Discounting future income and college "
+           "lowers their present value, so the 5% gap is smaller. Both charts share one dollar scale.")
+
 # --- #11 WHAT IS LADDERING? ---
 _rolloff_note = (f" With your current plan, for example, that trims **${int(annual_rolloff):,.0f} a year** "
                  "as each rung expires.") if annual_rolloff > 0 else ""
@@ -542,7 +628,7 @@ with pdf_col:
             with st.spinner("Preparing report…"):
                 st.session_state["pdf_bytes"] = build_client_pdf(
                     export, float(df["Gap"].iloc[0]), float(df["Total Coverage"].iloc[0]),
-                    float(annual_rolloff), insight_plain)
+                    float(annual_rolloff), insight_plain, real_rate_pct=float(real_rate_pct))
         except ReportError:
             st.error("The report could not be prepared. Please try again shortly.")
     if "pdf_bytes" in st.session_state:
