@@ -199,7 +199,7 @@ with st.sidebar:
     with tab_money:
         mortgage = st.number_input(
             "Money still owed on your mortgage", min_value=0, max_value=MAX_MONEY, value=None, step=10000, key="mortgage",
-            help="What you still owe on your home today.",
+            help="What you still owe on your home today. Leave blank if you have no mortgage.",
         )
         mtg_years = st.slider(
             "Years left on your mortgage", 1, 30, key="mtg_years",

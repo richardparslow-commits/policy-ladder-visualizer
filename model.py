@@ -80,6 +80,8 @@ def build_df(mortgage, mtg_rate, mtg_years, other_debt, debt_years, income_req, 
              final_expenses, liquid_assets, existing_life, existing_life_years, policies,
              real_rate_pct=0.0):
     """Capital required to fund all remaining obligations after death in year yr."""
+    if mortgage is None:  # Blank mortgage amount means no mortgage.
+        mortgage = 0
     amounts = dict(mortgage=mortgage, other_debt=other_debt, income_req=income_req,
                    college_total=college_total, childcare_annual=childcare_annual,
                    final_expenses=final_expenses, liquid_assets=liquid_assets,
