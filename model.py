@@ -5,6 +5,7 @@ Income and college are discounted to today's dollars at an optional inflation-ad
 return (default 0). No inflation, taxes, new assets, or premium quote is assumed.
 All proposed policies start today. A term N covers years [0, N).
 """
+
 import itertools
 import math
 from numbers import Real
@@ -51,14 +52,23 @@ def _year_range(minimum, maximum):
 
 
 def _number(value, name, maximum=MAX_MONEY):
-    if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value) or not 0 <= value <= maximum:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, Real)
+        or not math.isfinite(value)
+        or not 0 <= value <= maximum
+    ):
         raise ValueError(f"{name} must be a number {_amount_range(maximum)}")
     return float(value)
 
 
 def _years(value, name, minimum=0, maximum=MODEL_YEARS):
     message = f"{name} must be a whole number of years {_year_range(minimum, maximum)}"
-    if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value):
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, Real)
+        or not math.isfinite(value)
+    ):
         raise ValueError(message)
     if value != int(value) or not minimum <= value <= maximum:
         raise ValueError(message)
@@ -78,28 +88,61 @@ def mortgage_balance(principal, annual_rate_pct, years_left, elapsed_years):
     # Algebraically equivalent to the usual formula, without subtracting
     # nearly equal powers or computing unnecessarily large intermediate powers.
     log_growth = math.log1p(rate)
-    return principal * (-math.expm1((t - n) * log_growth)) / (-math.expm1(-n * log_growth))
+    return (
+        principal * (-math.expm1((t - n) * log_growth)) / (-math.expm1(-n * log_growth))
+    )
 
 
 def _present_value(amount, first, count, rate_pct):
     """Value at the start of the current year of `count` payments of `amount`, the first `first` years out."""
     v = 1 / (1 + rate_pct / 100)
-    return amount * sum(v ** t for t in range(first, first + count))
+    return amount * sum(v**t for t in range(first, first + count))
 
 
-def build_df(mortgage, mtg_rate, mtg_years, other_debt, debt_years, income_req, income_years,
-             college_total, college_start, college_years, childcare_annual, childcare_years,
-             final_expenses, liquid_assets, existing_life, existing_life_years, policies,
-             real_rate_pct=0.0):
+def build_df(
+    mortgage,
+    mtg_rate,
+    mtg_years,
+    other_debt,
+    debt_years,
+    income_req,
+    income_years,
+    college_total,
+    college_start,
+    college_years,
+    childcare_annual,
+    childcare_years,
+    final_expenses,
+    liquid_assets,
+    existing_life,
+    existing_life_years,
+    policies,
+    real_rate_pct=0.0,
+):
     """Capital required to fund all remaining obligations after death in year yr."""
     if mortgage is None:  # Blank mortgage amount means no mortgage.
         mortgage = 0
-    amounts = dict(mortgage=mortgage, other_debt=other_debt, income_req=income_req,
-                   college_total=college_total, childcare_annual=childcare_annual,
-                   final_expenses=final_expenses, liquid_assets=liquid_assets,
-                   existing_life=existing_life)
+    amounts = {
+        "mortgage": mortgage,
+        "other_debt": other_debt,
+        "income_req": income_req,
+        "college_total": college_total,
+        "childcare_annual": childcare_annual,
+        "final_expenses": final_expenses,
+        "liquid_assets": liquid_assets,
+        "existing_life": existing_life,
+    }
     amounts = {k: _number(v, LABELS[k]) for k, v in amounts.items()}
-    mortgage, other_debt, income_req, college_total, childcare_annual, final_expenses, liquid_assets, existing_life = amounts.values()
+    (
+        mortgage,
+        other_debt,
+        income_req,
+        college_total,
+        childcare_annual,
+        final_expenses,
+        liquid_assets,
+        existing_life,
+    ) = amounts.values()
     if mtg_rate is None and mortgage == 0:  # No mortgage, so the rate does not apply.
         mtg_rate = 0.0
     mtg_rate = _number(mtg_rate, LABELS["mtg_rate"], 25)
@@ -109,37 +152,72 @@ def build_df(mortgage, mtg_rate, mtg_years, other_debt, debt_years, income_req, 
     childcare_years = _years(childcare_years, LABELS["childcare_years"], 0, 15)
     college_start = _years(college_start, LABELS["college_start"], 0, 25)
     college_years = _years(college_years, LABELS["college_years"], 0, 8)
-    existing_life_years = _years(existing_life_years, LABELS["existing_life_years"], 1, MODEL_YEARS + 1)
+    existing_life_years = _years(
+        existing_life_years, LABELS["existing_life_years"], 1, MODEL_YEARS + 1
+    )
     real_rate_pct = _number(real_rate_pct, LABELS["real_rate_pct"], 10)
     if college_total > 0 and college_years == 0:
-        raise ValueError(f'Set "{LABELS["college_years"]}" above zero when "{LABELS["college_total"]}" is entered')
+        raise ValueError(
+            f'Set "{LABELS["college_years"]}" above zero when "{LABELS["college_total"]}" is entered'
+        )
     if not isinstance(policies, (list, tuple)) or len(policies) > 3:
         raise ValueError("You can enter up to 3 policies")
     normalized = []
     for i, p in enumerate(policies, start=1):
         if not isinstance(p, dict) or set(p) != {"amt", "prem", "term"}:
             raise ValueError("Each policy needs an amount, a yearly cost and a term")
-        normalized.append(dict(amt=_number(p["amt"], f"Policy #{i}: Amount it pays out ($)"),
-                               prem=_number(p["prem"], f"Policy #{i}: Cost per year ($)", 1_000_000),
-                               term=_years(p["term"], f"Policy #{i}: How long it lasts (years)", 1, MODEL_YEARS + 1)))
+        normalized.append(
+            {
+                "amt": _number(p["amt"], f"Policy #{i}: Amount it pays out ($)"),
+                "prem": _number(
+                    p["prem"], f"Policy #{i}: Cost per year ($)", 1_000_000
+                ),
+                "term": _years(
+                    p["term"],
+                    f"Policy #{i}: How long it lasts (years)",
+                    1,
+                    MODEL_YEARS + 1,
+                ),
+            }
+        )
     data = []
     for yr in range(MODEL_YEARS + 1):
         m = mortgage_balance(mortgage, mtg_rate, mtg_years, yr)
         income = _present_value(income_req, 0, max(income_years - yr, 0), real_rate_pct)
         childcare = childcare_annual * max(childcare_years - yr, 0)
-        remaining_college = max(college_start + college_years - max(yr, college_start), 0)
-        college = (_present_value(college_total / college_years, max(college_start - yr, 0), remaining_college, real_rate_pct)
-                   if college_years else 0)
+        remaining_college = max(
+            college_start + college_years - max(yr, college_start), 0
+        )
+        college = (
+            _present_value(
+                college_total / college_years,
+                max(college_start - yr, 0),
+                remaining_college,
+                real_rate_pct,
+            )
+            if college_years
+            else 0
+        )
         debt = other_debt * max(1 - yr / debt_years, 0)
         liabilities = m + income + childcare + college + debt + final_expenses
         resources = liquid_assets + (existing_life if yr < existing_life_years else 0)
         live = [p for p in normalized if yr < p["term"]]
-        data.append({"Year": yr, "Mortgage": m, "Debt": debt, "Income": income,
-                     "Childcare": childcare, "College": college, "Final Expenses": final_expenses,
-                     "Total Liabilities": liabilities, "Existing Resources": resources,
-                     "Gap": max(liabilities - resources, 0),
-                     "Total Coverage": sum(p["amt"] for p in live),
-                     "Premium": sum(p["prem"] for p in live)})
+        data.append(
+            {
+                "Year": yr,
+                "Mortgage": m,
+                "Debt": debt,
+                "Income": income,
+                "Childcare": childcare,
+                "College": college,
+                "Final Expenses": final_expenses,
+                "Total Liabilities": liabilities,
+                "Existing Resources": resources,
+                "Gap": max(liabilities - resources, 0),
+                "Total Coverage": sum(p["amt"] for p in live),
+                "Premium": sum(p["prem"] for p in live),
+            }
+        )
     return pd.DataFrame(data)
 
 
@@ -156,29 +234,43 @@ def optimal_ladder(gap, slots=3, step=LADDER_STEP):
     """
     gap = [_number(g, "gap", math.inf) for g in gap]
     if len(gap) != MODEL_YEARS + 1:
-        raise ValueError(f"gap must have exactly {MODEL_YEARS + 1} values, one for each year from 0 to {MODEL_YEARS}")
+        raise ValueError(
+            f"gap must have exactly {MODEL_YEARS + 1} values, one for each year from 0 to {MODEL_YEARS}"
+        )
     best = None
     for terms in itertools.combinations_with_replacement(LADDER_TERMS, slots):
         # Year y is covered by policies whose term exceeds y. Segment j is the years
         # [terms[j-1], terms[j]) where policies j.. are alive; the tail after the last
         # term is covered by nothing, so the gap there must already be zero.
         bounds = [0, *terms, MODEL_YEARS + 1]
-        need = [max(gap[bounds[j]:bounds[j + 1]], default=0.0) for j in range(slots + 1)]
+        need = [
+            max(gap[bounds[j] : bounds[j + 1]], default=0.0) for j in range(slots + 1)
+        ]
         if need[slots] > 0:
             continue
-        suffix = [0.0] * (slots + 1)  # coverage in segment j, built from the longest term back
+        suffix = [0.0] * (
+            slots + 1
+        )  # coverage in segment j, built from the longest term back
         for j in range(slots - 1, -1, -1):
             suffix[j] = max(need[j], suffix[j + 1])
-        amounts = [math.ceil(round(suffix[j] - suffix[j + 1], 2) / step) * step for j in range(slots)]
+        amounts = [
+            math.ceil(round(suffix[j] - suffix[j + 1], 2) / step) * step
+            for j in range(slots)
+        ]
         if any(a > MAX_MONEY for a in amounts):
             continue
-        policies = [dict(amt=float(a), term=t) for a, t in zip(amounts, terms)]
-        cover = [sum(p["amt"] for p in policies if yr < p["term"]) for yr in range(MODEL_YEARS + 1)]
+        policies = [{"amt": float(a), "term": t} for a, t in zip(amounts, terms)]
+        cover = [
+            sum(p["amt"] for p in policies if yr < p["term"])
+            for yr in range(MODEL_YEARS + 1)
+        ]
         excess = sum(c - g for c, g in zip(cover, gap))
         key = (excess, sum(p["amt"] > 0 for p in policies), sum(amounts))
         if best is None or key < best[0]:
             best = (key, policies, excess)
     if best is None:
         terms = ", ".join(str(t) for t in LADDER_TERMS[:-1])
-        raise ValueError(f"No ladder fits: each policy amount must be at most {MAX_MONEY:,.0f}, and the gap must be covered by terms of {terms} years or permanent")
+        raise ValueError(
+            f"No ladder fits: each policy amount must be at most {MAX_MONEY:,.0f}, and the gap must be covered by terms of {terms} years or permanent"
+        )
     return best[1], best[2]

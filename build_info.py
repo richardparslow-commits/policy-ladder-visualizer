@@ -1,4 +1,5 @@
 """Public source fingerprint for proving which deployment the canary tested."""
+
 from hashlib import sha256
 from pathlib import Path
 
@@ -6,8 +7,16 @@ from pathlib import Path
 def app_revision():
     root = Path(__file__).resolve().parent
     digest = sha256()
-    for name in ("streamlit_app.py", "model.py", "pdf_report.py", "build_info.py", "requirements.txt", ".streamlit/config.toml"):
-        digest.update(name.encode()); digest.update((root / name).read_bytes())
+    for name in (
+        "streamlit_app.py",
+        "model.py",
+        "pdf_report.py",
+        "build_info.py",
+        "requirements.txt",
+        ".streamlit/config.toml",
+    ):
+        digest.update(name.encode())
+        digest.update((root / name).read_bytes())
     return digest.hexdigest()[:16]
 
 
