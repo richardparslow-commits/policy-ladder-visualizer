@@ -184,3 +184,13 @@ gap_analysis_report_*.pdf
 # Browser test output (synthetic fixtures only)
 test-results/
 playwright-report/
+
+# Local debug/preview output at repo root and agent workspace
+/_chart_preview.html
+/_live_state_view.html
+/_live_verify_report.html
+/_pdf_preview.html
+/_pdf_preview_src.png
+/_tmp_img.png
+/shots/
+.freebuff/
