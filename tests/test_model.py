@@ -67,14 +67,18 @@ def test_blank_mortgage_amount_means_no_mortgage():
 
 
 def test_validation_errors_name_the_on_screen_labels():
-    with pytest.raises(ValueError, match=re.escape('Years until those debts are paid off must be')):
+    with pytest.raises(ValueError, match=re.escape('Years until those debts are paid off must be a whole number of years from 1 to 15 years')):
         build_df(**inputs(debt_years=0.5))
-    with pytest.raises(ValueError, match=re.escape('Your mortgage interest rate (%) must be a number')):
+    with pytest.raises(ValueError, match=re.escape('Your mortgage interest rate (%) must be a number from 0 to 25')):
         build_df(**inputs(mortgage=400000,mtg_rate=None))
+    with pytest.raises(ValueError, match=re.escape('Your mortgage interest rate (%) must be a number from 0 to 25')):
+        build_df(**inputs(mortgage=400000,mtg_rate=30))
     with pytest.raises(ValueError, match=re.escape('Set "Years of college to cover" above zero when "Total college fund for the kids" is entered')):
         build_df(**inputs(college_years=0))
-    with pytest.raises(ValueError, match=re.escape('Policy #2: Cost per year ($) is outside the supported range')):
+    with pytest.raises(ValueError, match=re.escape('Policy #2: Cost per year ($) must be a number from 0 to 1,000,000')):
         build_df(**inputs(policies=[dict(amt=100,prem=1,term=20),dict(amt=100,prem=-1,term=20)]))
+    with pytest.raises(ValueError, match=re.escape('Policy #1: How long it lasts (years) must be a whole number of years from 1 to 40 years, or 41 for permanent')):
+        build_df(**inputs(policies=[dict(amt=100,prem=1,term=41.5)]))
 
 
 def test_no_liabilities_or_policies_and_permanent_existing_coverage():

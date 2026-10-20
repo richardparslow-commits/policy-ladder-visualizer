@@ -38,18 +38,30 @@ LABELS = {
 }
 
 
+def _amount_range(maximum):
+    """Describes the allowed amounts, e.g. 'from 0 to 1,000,000'."""
+    return "0 or more" if math.isinf(maximum) else f"from 0 to {maximum:,.0f}"
+
+
+def _year_range(minimum, maximum):
+    """Describes the allowed years; the top model term is permanent coverage."""
+    if maximum == MODEL_YEARS + 1:
+        return f"from {minimum} to {MODEL_YEARS} years, or {maximum} for permanent"
+    return f"from {minimum} to {maximum} years"
+
+
 def _number(value, name, maximum=MAX_MONEY):
-    if isinstance(value, bool) or not isinstance(value, Real):
-        raise ValueError(f"{name} must be a number")
-    if not math.isfinite(value) or not 0 <= value <= maximum:
-        raise ValueError(f"{name} is outside the supported range")
+    if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value) or not 0 <= value <= maximum:
+        raise ValueError(f"{name} must be a number {_amount_range(maximum)}")
     return float(value)
 
 
 def _years(value, name, minimum=0, maximum=MODEL_YEARS):
-    value = _number(value, name, maximum)
-    if value != int(value) or value < minimum:
-        raise ValueError(f"{name} must be a whole number in range")
+    message = f"{name} must be a whole number of years {_year_range(minimum, maximum)}"
+    if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value):
+        raise ValueError(message)
+    if value != int(value) or not minimum <= value <= maximum:
+        raise ValueError(message)
     return int(value)
 
 
@@ -102,11 +114,11 @@ def build_df(mortgage, mtg_rate, mtg_years, other_debt, debt_years, income_req, 
     if college_total > 0 and college_years == 0:
         raise ValueError(f'Set "{LABELS["college_years"]}" above zero when "{LABELS["college_total"]}" is entered')
     if not isinstance(policies, (list, tuple)) or len(policies) > 3:
-        raise ValueError("At most three policies are supported")
+        raise ValueError("You can enter up to 3 policies")
     normalized = []
     for i, p in enumerate(policies, start=1):
         if not isinstance(p, dict) or set(p) != {"amt", "prem", "term"}:
-            raise ValueError("Invalid policy fields")
+            raise ValueError("Each policy needs an amount, a yearly cost and a term")
         normalized.append(dict(amt=_number(p["amt"], f"Policy #{i}: Amount it pays out ($)"),
                                prem=_number(p["prem"], f"Policy #{i}: Cost per year ($)", 1_000_000),
                                term=_years(p["term"], f"Policy #{i}: How long it lasts (years)", 1, MODEL_YEARS + 1)))
@@ -144,7 +156,7 @@ def optimal_ladder(gap, slots=3, step=LADDER_STEP):
     """
     gap = [_number(g, "gap", math.inf) for g in gap]
     if len(gap) != MODEL_YEARS + 1:
-        raise ValueError("gap must have one value per model year")
+        raise ValueError(f"gap must have exactly {MODEL_YEARS + 1} values, one for each year from 0 to {MODEL_YEARS}")
     best = None
     for terms in itertools.combinations_with_replacement(LADDER_TERMS, slots):
         # Year y is covered by policies whose term exceeds y. Segment j is the years
@@ -167,5 +179,6 @@ def optimal_ladder(gap, slots=3, step=LADDER_STEP):
         if best is None or key < best[0]:
             best = (key, policies, excess)
     if best is None:
-        raise ValueError("No ladder fits within the per-policy amount limit")
+        terms = ", ".join(str(t) for t in LADDER_TERMS[:-1])
+        raise ValueError(f"No ladder fits: each policy amount must be at most {MAX_MONEY:,.0f}, and the gap must be covered by terms of {terms} years or permanent")
     return best[1], best[2]
