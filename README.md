@@ -10,8 +10,9 @@ income, childcare and tuition, pay remaining mortgage/debt and final expenses,
 then offsets constant liquid assets and existing insurance while it is in force.
 The annual income need is the living budget after debt payoff: exclude separately
 entered childcare, tuition and final expenses, and deduct surviving-family income.
-Amounts use today's dollars with zero assumed return, inflation and taxes. Other
-debt is paid down linearly; the mortgage uses monthly amortization. College funds
+Amounts use today's dollars. An optional inflation-adjusted return (default 0%)
+discounts remaining income and tuition to today; childcare is funded in full.
+No inflation or taxes are assumed. Other debt is paid down linearly; the mortgage uses monthly amortization. College funds
 are reserved before college begins and decline as tuition is paid. These explicit
 simplifications are planning assumptions, not a personalized recommendation.
 

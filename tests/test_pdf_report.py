@@ -37,6 +37,7 @@ def test_bad_frames_rejected_before_spawning(monkeypatch,bad):
 def test_identifiers_and_unbounded_text_rejected():
     with pytest.raises(report.ReportError): report.build_client_pdf(frame(),0,0,0,'Synthetic',client_name='Client')
     with pytest.raises(report.ReportError): report.build_client_pdf(frame(),0,0,0,'x'*801)
+    with pytest.raises(report.ReportError): report.build_client_pdf(frame(),0,0,0,'Synthetic',real_rate_pct=11)
 
 
 def test_busy_renderer_fails_without_a_queue():
