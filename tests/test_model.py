@@ -61,6 +61,11 @@ def test_blank_mortgage_rate_allowed_only_without_a_mortgage():
     with pytest.raises(ValueError): build_df(**inputs(mortgage=400000,mtg_rate=None))
 
 
+def test_blank_mortgage_amount_means_no_mortgage():
+    assert build_df(**inputs(mortgage=None,mtg_rate=None)).loc[0,'Gap']==1_320_000
+    assert build_df(**inputs(mortgage=None,mtg_rate=6)).loc[0,'Gap']==1_320_000
+
+
 def test_validation_errors_name_the_on_screen_labels():
     with pytest.raises(ValueError, match=re.escape('Years until those debts are paid off must be')):
         build_df(**inputs(debt_years=0.5))

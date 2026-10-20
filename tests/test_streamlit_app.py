@@ -121,11 +121,21 @@ def test_auto_build_ladder_covers_gap_without_shortfall():
 def test_invalid_input_clears_gap_so_ladder_cannot_use_stale_inputs():
     app=AppTest.from_file(APP,default_timeout=30).run()
     assert 'ladder_gap' in app.session_state
-    app.number_input(key='mortgage').set_value(None).run()
+    app.number_input(key='other_debt').set_value(None).run()
     assert 'ladder_gap' not in app.session_state
     app.button(key='auto_ladder').click().run()
     assert any('Enter the family' in m.value for m in app.error)
     assert not any('Ladder built' in m.value for m in app.success)
+
+
+def test_blank_mortgage_amount_and_rate_give_full_report():
+    app=AppTest.from_file(APP,default_timeout=30).run()
+    app.number_input(key='mortgage').set_value(None)
+    app.number_input(key='mtg_rate').set_value(None).run()
+    assert not app.exception
+    assert not app.error
+    assert len(app.metric)==4
+    assert len(app.get('plotly_chart'))==2
 
 
 def test_blank_mortgage_rate_with_no_mortgage_still_gives_full_report():
